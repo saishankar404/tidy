@@ -56,7 +56,9 @@ export default {
           "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
+          bg: "hsl(var(--sidebar-bg))",
         },
+        "editor-bg": "hsl(var(--editor-bg))",
       },
       borderRadius: {
         lg: "var(--radius)",
