@@ -1,22 +1,58 @@
 import { useState } from "react";
-import { EditorSidebar } from "@/components/EditorSidebar";
+import { EditorSidebar, FileItem } from "@/components/EditorSidebar";
 import { EditorHeader } from "@/components/EditorHeader";
 import { CodeEditor } from "@/components/CodeEditor";
 import { toast } from "sonner";
 
-interface FileData {
-  name: string;
-  type: "file";
-  language: string;
-  content: string;
-}
-
-const initialFiles: FileData[] = [
+const initialFiles: FileItem[] = [
   {
-    name: "index.tsx",
+    name: "src",
+    type: "folder",
+    path: "src",
+    children: [
+      {
+        name: "index.tsx",
+        type: "file",
+        language: "typescript",
+        path: "src/index.tsx",
+      },
+      {
+        name: "App.tsx",
+        type: "file",
+        language: "typescript",
+        path: "src/App.tsx",
+      },
+      {
+        name: "components",
+        type: "folder",
+        path: "src/components",
+        children: [
+          {
+            name: "Button.tsx",
+            type: "file",
+            language: "typescript",
+            path: "src/components/Button.tsx",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: "styles.css",
+    type: "file",
+    language: "css",
+    path: "styles.css",
+  },
+  {
+    name: "utils.ts",
     type: "file",
     language: "typescript",
-    content: `import React from 'react';
+    path: "utils.ts",
+  },
+];
+
+const fileContents: Record<string, string> = {
+  "src/index.tsx": `import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles.css';
@@ -26,12 +62,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>
 );`,
-  },
-  {
-    name: "App.tsx",
-    type: "file",
-    language: "typescript",
-    content: `import React from 'react';
+  "src/App.tsx": `import React from 'react';
 
 function App() {
   return (
@@ -43,12 +74,21 @@ function App() {
 }
 
 export default App;`,
-  },
-  {
-    name: "styles.css",
-    type: "file",
-    language: "css",
-    content: `* {
+  "src/components/Button.tsx": `import React from 'react';
+
+interface ButtonProps {
+  children: React.ReactNode;
+  onClick?: () => void;
+}
+
+export function Button({ children, onClick }: ButtonProps) {
+  return (
+    <button onClick={onClick} className="btn">
+      {children}
+    </button>
+  );
+}`,
+  "styles.css": `* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -65,12 +105,7 @@ body {
   max-width: 1200px;
   margin: 0 auto;
 }`,
-  },
-  {
-    name: "utils.ts",
-    type: "file",
-    language: "typescript",
-    content: `export function formatDate(date: Date): string {
+  "utils.ts": `export function formatDate(date: Date): string {
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
@@ -88,74 +123,205 @@ export function debounce<T extends (...args: any[]) => any>(
     timeout = setTimeout(() => func(...args), wait);
   };
 }`,
-  },
-];
+};
 
 const Index = () => {
-  const [files, setFiles] = useState<FileData[]>(initialFiles);
-  const [currentFile, setCurrentFile] = useState("index.tsx");
+  const [files, setFiles] = useState<FileItem[]>(initialFiles);
+  const [contents, setContents] = useState<Record<string, string>>(fileContents);
+  const [currentFile, setCurrentFile] = useState("src/index.tsx");
 
-  const currentFileData = files.find((f) => f.name === currentFile);
-
-  const handleFileSelect = (fileName: string) => {
-    setCurrentFile(fileName);
+  const handleFileSelect = (filePath: string) => {
+    setCurrentFile(filePath);
   };
 
-  const handleFileAdd = (fileName: string) => {
+  const findAndUpdateTree = (
+    items: FileItem[],
+    predicate: (item: FileItem) => boolean,
+    updater: (item: FileItem) => FileItem | null
+  ): FileItem[] => {
+    return items.reduce((acc: FileItem[], item) => {
+      if (predicate(item)) {
+        const updated = updater(item);
+        if (updated) acc.push(updated);
+      } else if (item.type === "folder" && item.children) {
+        acc.push({
+          ...item,
+          children: findAndUpdateTree(item.children, predicate, updater),
+        });
+      } else {
+        acc.push(item);
+      }
+      return acc;
+    }, []);
+  };
+
+  const addToTree = (
+    items: FileItem[],
+    newItem: FileItem,
+    parentPath?: string
+  ): FileItem[] => {
+    if (!parentPath) {
+      return [...items, newItem];
+    }
+
+    return items.map((item) => {
+      if (item.path === parentPath && item.type === "folder") {
+        return {
+          ...item,
+          children: [...(item.children || []), newItem],
+        };
+      } else if (item.type === "folder" && item.children) {
+        return {
+          ...item,
+          children: addToTree(item.children, newItem, parentPath),
+        };
+      }
+      return item;
+    });
+  };
+
+  const handleFileAdd = (fileName: string, folderPath?: string) => {
+    const ext = fileName.split(".").pop() || "";
+    const language = getLanguageFromExt(ext);
+    const path = folderPath ? `${folderPath}/${fileName}` : fileName;
+
     // Check if file already exists
-    if (files.some((f) => f.name === fileName)) {
+    if (contents[path]) {
       toast.error("File already exists");
       return;
     }
 
-    const ext = fileName.split(".").pop() || "";
-    const language = getLanguageFromExt(ext);
-
-    const newFile: FileData = {
+    const newFile: FileItem = {
       name: fileName,
       type: "file",
       language,
-      content: `// New file: ${fileName}\n`,
+      path,
     };
 
-    setFiles([...files, newFile]);
-    setCurrentFile(fileName);
+    setFiles((prev) => addToTree(prev, newFile, folderPath));
+    setContents((prev) => ({
+      ...prev,
+      [path]: `// New file: ${fileName}\n`,
+    }));
+    setCurrentFile(path);
   };
 
-  const handleFileRename = (oldName: string, newName: string) => {
-    // Check if new name already exists
-    if (files.some((f) => f.name === newName)) {
+  const handleFolderAdd = (folderName: string, parentPath?: string) => {
+    const path = parentPath ? `${parentPath}/${folderName}` : folderName;
+
+    const newFolder: FileItem = {
+      name: folderName,
+      type: "folder",
+      path,
+      children: [],
+    };
+
+    setFiles((prev) => addToTree(prev, newFolder, parentPath));
+  };
+
+  const handleFileRename = (oldPath: string, newPath: string) => {
+    // Check if new path already exists
+    if (contents[newPath]) {
       toast.error("File already exists");
       return;
     }
 
-    setFiles(
-      files.map((f) =>
-        f.name === oldName ? { ...f, name: newName } : f
+    setFiles((prev) =>
+      findAndUpdateTree(
+        prev,
+        (item) => item.path === oldPath,
+        (item) => ({
+          ...item,
+          name: newPath.split("/").pop() || item.name,
+          path: newPath,
+        })
       )
     );
 
-    if (currentFile === oldName) {
-      setCurrentFile(newName);
+    if (contents[oldPath]) {
+      setContents((prev) => {
+        const newContents = { ...prev };
+        newContents[newPath] = prev[oldPath];
+        delete newContents[oldPath];
+        return newContents;
+      });
+    }
+
+    if (currentFile === oldPath) {
+      setCurrentFile(newPath);
     }
   };
 
-  const handleFileDelete = (fileName: string) => {
-    const newFiles = files.filter((f) => f.name !== fileName);
-    setFiles(newFiles);
+  const handleFileDelete = (filePath: string) => {
+    setFiles((prev) =>
+      findAndUpdateTree(
+        prev,
+        (item) => item.path === filePath,
+        () => null
+      )
+    );
 
-    // If we're deleting the current file, switch to another file
-    if (currentFile === fileName) {
-      setCurrentFile(newFiles.length > 0 ? newFiles[0].name : "");
+    setContents((prev) => {
+      const newContents = { ...prev };
+      delete newContents[filePath];
+      return newContents;
+    });
+
+    if (currentFile === filePath) {
+      const allPaths = Object.keys(contents).filter((p) => p !== filePath);
+      setCurrentFile(allPaths.length > 0 ? allPaths[0] : "");
+    }
+  };
+
+  const handleFileMove = (fromPath: string, toFolderPath: string) => {
+    const fileName = fromPath.split("/").pop();
+    if (!fileName) return;
+
+    const newPath = `${toFolderPath}/${fileName}`;
+
+    // Check if destination already exists
+    if (contents[newPath]) {
+      toast.error("File already exists at destination");
+      return;
+    }
+
+    // Remove from old location
+    let movedItem: FileItem | null = null;
+    setFiles((prev) =>
+      findAndUpdateTree(
+        prev,
+        (item) => item.path === fromPath,
+        (item) => {
+          movedItem = { ...item, path: newPath };
+          return null;
+        }
+      )
+    );
+
+    // Add to new location
+    if (movedItem) {
+      setFiles((prev) => addToTree(prev, movedItem!, toFolderPath));
+
+      if (contents[fromPath]) {
+        setContents((prev) => {
+          const newContents = { ...prev };
+          newContents[newPath] = prev[fromPath];
+          delete newContents[fromPath];
+          return newContents;
+        });
+      }
+
+      if (currentFile === fromPath) {
+        setCurrentFile(newPath);
+      }
     }
   };
 
   const handleContentChange = (newContent: string) => {
-    setFiles(
-      files.map((f) =>
-        f.name === currentFile ? { ...f, content: newContent } : f
-      )
-    );
+    setContents((prev) => ({
+      ...prev,
+      [currentFile]: newContent,
+    }));
   };
 
   const getLanguageFromExt = (ext: string): string => {
@@ -177,6 +343,12 @@ const Index = () => {
     }
   };
 
+  const currentFileData = contents[currentFile];
+  const getCurrentLanguage = () => {
+    const ext = currentFile.split(".").pop() || "";
+    return getLanguageFromExt(ext);
+  };
+
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden bg-background">
       <EditorHeader fileName={currentFile} />
@@ -186,18 +358,21 @@ const Index = () => {
           <EditorSidebar
             files={files}
             currentFile={currentFile}
+            fileContents={contents}
             onFileSelect={handleFileSelect}
             onFileAdd={handleFileAdd}
+            onFolderAdd={handleFolderAdd}
             onFileRename={handleFileRename}
             onFileDelete={handleFileDelete}
+            onFileMove={handleFileMove}
           />
         </div>
 
         <div className="flex-1 overflow-hidden">
           {currentFileData ? (
             <CodeEditor
-              content={currentFileData.content}
-              language={currentFileData.language}
+              content={currentFileData}
+              language={getCurrentLanguage()}
               onChange={handleContentChange}
             />
           ) : (

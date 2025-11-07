@@ -109,3 +109,20 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Squircle border radius (Apple-style smooth corners) */
+.squircle {
+  border-radius: 12px;
+  clip-path: url(#squircle);
+}
+
+@supports (border-radius: 12px) {
+  .squircle {
+    border-radius: 12px;
+    /* Simulate squircle with multiple border-radius values */
+    border-top-left-radius: 12px 14px;
+    border-top-right-radius: 12px 14px;
+    border-bottom-left-radius: 12px 14px;
+    border-bottom-right-radius: 12px 14px;
+  }
+}
