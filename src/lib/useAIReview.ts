@@ -209,7 +209,7 @@ rootElement`;
   };
 }
 
-export function useAIReview(fileContent: string, filePath?: string, language?: string, forceAnalyze?: boolean) {
+export function useAIReview(fileContent: string, filePath?: string, language?: string, forceAnalyze?: boolean, selectedAnalyses?: string[]) {
   const [data, setData] = useState<AIReviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -242,8 +242,9 @@ export function useAIReview(fileContent: string, filePath?: string, language?: s
     }
 
     // Set loading immediately to show user that review will happen
+    const enabledAnalyzers = selectedAnalyses || ['codeQuality', 'security', 'performance', 'maintainability', 'testing', 'documentation'];
     setLoading(true);
-    setProgress({ current: 0, total: 6, currentAnalyzer: '', status: 'running' });
+    setProgress({ current: 0, total: enabledAnalyzers.length, currentAnalyzer: '', status: 'running' });
 
     // Create new abort controller for this analysis
     abortControllerRef.current = new AbortController();
@@ -270,7 +271,9 @@ export function useAIReview(fileContent: string, filePath?: string, language?: s
 
         // Create orchestrator if not exists
         if (!orchestratorRef.current) {
-          orchestratorRef.current = new AnalysisOrchestrator(geminiService);
+          orchestratorRef.current = new AnalysisOrchestrator(geminiService, {
+            enabledAnalyzers: selectedAnalyses || ['codeQuality', 'security', 'performance', 'maintainability', 'testing', 'documentation']
+          });
         }
 
         const context = {
@@ -302,7 +305,7 @@ export function useAIReview(fileContent: string, filePath?: string, language?: s
           // Only save to analysis history if analysis completed successfully (no errors, not aborted, and all results present)
           const hasErrors = analysisResult.errors && analysisResult.errors.length > 0;
           const wasAborted = abortControllerRef.current?.signal.aborted;
-          const expectedAnalyzers = 6; // codeQuality, security, performance, maintainability, testing, documentation
+          const expectedAnalyzers = enabledAnalyzers.length;
           const hasAllResults = analysisResult.results && analysisResult.results.length === expectedAnalyzers;
 
           if (!hasErrors && !wasAborted && hasAllResults) {

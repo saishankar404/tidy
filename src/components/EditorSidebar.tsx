@@ -489,7 +489,7 @@ export function EditorSidebar({
           <div
             className="fixed z-50 bg-popover border border-border shadow-lg rounded-lg p-4 w-80 animate-preview-in pointer-events-none"
             style={{
-              left: `${hoverPreview.position.x - 280}px`,
+              left: `${hoverPreview.position.x + 10}px`,
               top: `${hoverPreview.position.y}px`,
             }}
           >

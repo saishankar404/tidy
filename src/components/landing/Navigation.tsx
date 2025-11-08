@@ -16,16 +16,18 @@ const Navigation = () => {
         <div className="w-12 h-8 bg-background/10 rounded" />
         
         <div className="flex items-center gap-6">
-          <a href="#" className="text-background font-bold text-sm tracking-wide hover:text-neon transition-colors">
+          <a href="/docs" className="text-background font-bold text-sm tracking-wide hover:text-neon transition-colors">
             DOCS
           </a>
-          <Button 
-            variant="secondary" 
-            size="sm"
-            className="bg-dark-gray text-background hover:bg-dark-gray/80 rounded-md px-5 py-2 font-bold text-xs tracking-wide"
-          >
-            DOWNLOAD
-          </Button>
+            <a href="/code">
+            <Button 
+              variant="secondary" 
+              size="sm"
+              className="bg-dark-gray text-background hover:bg-dark-gray/80 rounded-md px-5 py-2 font-bold text-xs tracking-wide"
+            >
+              CODE NOW
+            </Button>
+            </a>
         </div>
       </div>
     </nav>

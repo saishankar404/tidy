@@ -645,7 +645,7 @@ const Index = () => {
         </div>
 
         <PanelGroup direction="horizontal" className="flex-1">
-          <Panel defaultSize={70} minSize={30}>
+          <Panel defaultSize={isCodeReviewerOpen ? 60 : 100} minSize={30}>
             <div className="h-full overflow-hidden">
               {isLoading ? (
                 <div className="h-full flex items-center justify-center bg-editor-bg animate-fade-in">
@@ -671,18 +671,21 @@ const Index = () => {
             </div>
           </Panel>
 
-
-         </PanelGroup>
-
-        {isCodeReviewerOpen && (
-          <CodeReviewerSidebar
-            currentFile={currentFile}
-            currentFileData={currentFileData}
-            onClose={() => setIsCodeReviewerOpen(false)}
-            onOpenDiff={handleOpenDiff}
-            onApplyChanges={handleApplyChanges}
-          />
-        )}
+          {isCodeReviewerOpen && (
+            <>
+              <PanelResizeHandle className="w-2 bg-border hover:bg-border/80 transition-colors" />
+              <Panel defaultSize={40} minSize={20} maxSize={80}>
+                <CodeReviewerSidebar
+                  currentFile={currentFile}
+                  currentFileData={currentFileData}
+                  onClose={() => setIsCodeReviewerOpen(false)}
+                  onOpenDiff={handleOpenDiff}
+                  onApplyChanges={handleApplyChanges}
+                />
+              </Panel>
+            </>
+          )}
+        </PanelGroup>
       </div>
     </div>
   );

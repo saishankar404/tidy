@@ -574,10 +574,16 @@ Complete from cursor:`;
             enabled: true,
           },
           quickSuggestions: true,
-          suggest: {
-            preview: true,
-            showInlineDetails: true,
-          }
+           suggest: {
+             preview: true,
+             showInlineDetails: true,
+           },
+           hover: {
+             enabled: true,
+             delay: 300,
+             sticky: true,
+             above: false,
+           }
         }}
       />
     </div>
