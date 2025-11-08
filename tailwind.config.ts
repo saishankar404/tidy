@@ -59,6 +59,13 @@ export default {
           bg: "hsl(var(--sidebar-bg))",
         },
         "editor-bg": "hsl(var(--editor-bg))",
+        "doc-sidebar-bg": "hsl(var(--doc-sidebar-bg))",
+        "doc-sidebar-border": "hsl(var(--doc-sidebar-border))",
+        "doc-nav-hover": "hsl(var(--doc-nav-hover))",
+        "doc-nav-active": "hsl(var(--doc-nav-active))",
+        "code-bg": "hsl(var(--code-bg))",
+        "inline-code-bg": "hsl(var(--inline-code-bg))",
+        "inline-code-text": "hsl(var(--inline-code-text))",
         // Landing page colors
         neon: "hsl(var(--neon-green))",
         "neon-bright": "hsl(var(--neon-green-bright))",
@@ -147,5 +154,5 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],
 } satisfies Config;
