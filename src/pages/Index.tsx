@@ -26,19 +26,32 @@ const initialFiles: FileItem[] = [
         language: "typescript",
         path: "src/App.tsx",
       },
-      {
-        name: "components",
-        type: "folder",
-        path: "src/components",
-        children: [
-          {
-            name: "Button.tsx",
-            type: "file",
-            language: "typescript",
-            path: "src/components/Button.tsx",
-          },
-        ],
-      },
+       {
+         name: "components",
+         type: "folder",
+         path: "src/components",
+         children: [
+           {
+             name: "Button.tsx",
+             type: "file",
+             language: "typescript",
+             path: "src/components/Button.tsx",
+           },
+         ],
+       },
+       {
+         name: "services",
+         type: "folder",
+         path: "src/services",
+         children: [
+           {
+             name: "api.ts",
+             type: "file",
+             language: "typescript",
+             path: "src/services/api.ts",
+           },
+         ],
+       },
     ],
   },
   {
@@ -66,29 +79,133 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>
 );`,
-  "src/App.tsx": `import React from 'react';
+   "src/App.tsx": `import React, { useState, useEffect } from 'react';
+import { Button } from './components/Button';
+import { formatDate, debounce } from '../utils';
+import { apiService } from './services/api';
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
 
 function App() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const loadUsers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Simulate API call - in real app this would fetch from apiService
+      const mockUsers: User[] = [
+        { id: '1', name: 'John Doe', email: 'john@example.com' },
+        { id: '2', name: 'Jane Smith', email: 'jane@example.com' },
+      ];
+      setUsers(mockUsers);
+    } catch (err) {
+      setError('Failed to load users');
+      console.error('Error loading users:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const debouncedSearch = debounce((term: string) => {
+    console.log('Searching for:', term);
+  }, 300);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const term = e.target.value;
+    setSearchTerm(term);
+    debouncedSearch(term);
+  };
+
+  const handleUserClick = (userId: string) => {
+    console.log('User clicked:', userId);
+    // This could trigger navigation or modal
+  };
+
   return (
     <div className="app">
-      <h1>Hello, World!</h1>
-      <p>Welcome to your code editor</p>
+      <h1>User Management System</h1>
+
+      <div className="search-section">
+        <input
+          type="text"
+          placeholder="Search users..."
+          value={searchTerm}
+          onChange={handleSearchChange}
+          className="search-input"
+        />
+      </div>
+
+      <div className="actions">
+        <Button onClick={loadUsers} disabled={loading}>
+          {loading ? 'Loading...' : 'Refresh Users'}
+        </Button>
+      </div>
+
+      {error && <div className="error-message">{error}</div>}
+
+      <div className="users-list">
+        {users.map(user => (
+          <div key={user.id} className="user-card" onClick={() => handleUserClick(user.id)}>
+            <h3>{user.name}</h3>
+            <p>{user.email}</p>
+            <small>Last updated: {formatDate(new Date())}</small>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 export default App;`,
-  "src/components/Button.tsx": `import React from 'react';
+   "src/components/Button.tsx": `import React, { useState, useEffect } from 'react';
 
 interface ButtonProps {
   children: React.ReactNode;
   onClick?: () => void;
+  variant?: 'primary' | 'secondary';
+  disabled?: boolean;
 }
 
-export function Button({ children, onClick }: ButtonProps) {
+export function Button({ children, onClick, variant = 'primary', disabled = false }: ButtonProps) {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleClick = async () => {
+    if (disabled || isLoading) return;
+
+    setIsLoading(true);
+    try {
+      await onClick?.();
+    } catch (error) {
+      console.error('Button click error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoading) {
+      const timer = setTimeout(() => setIsLoading(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
+
+  const className = \`btn btn-\${variant} \${disabled ? 'btn-disabled' : ''} \${isLoading ? 'btn-loading' : ''}\`;
+
   return (
-    <button onClick={onClick} className="btn">
-      {children}
+    <button onClick={handleClick} className={className} disabled={disabled || isLoading}>
+      {isLoading ? 'Loading...' : children}
     </button>
   );
 }`,
@@ -109,24 +226,54 @@ body {
   max-width: 1200px;
   margin: 0 auto;
 }`,
-  "utils.ts": `export function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+   "utils.ts": `export function formatDate(date: Date): string {
+   return date.toLocaleDateString('en-US', {
+     year: 'numeric',
+     month: 'long',
+     day: 'numeric'
+   });
+ }
+
+ export function debounce<T extends (...args: any[]) => any>(
+   func: T,
+   wait: number
+ ): (...args: Parameters<T>) => void {
+   let timeout: NodeJS.Timeout;
+   return (...args: Parameters<T>) => {
+     clearTimeout(timeout);
+     timeout = setTimeout(() => func(...args), wait);
+   };
+ }`,
+   "src/services/api.ts": `import axios from 'axios';
+
+export class ApiService {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = 'https://api.example.com') {
+    this.baseUrl = baseUrl;
+  }
+
+  async fetchUserData(userId: string) {
+    try {
+      const response = await axios.get(\`\${this.baseUrl}/users/\${userId}\`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch user data:', error);
+      throw error;
+    }
+  }
+
+  async updateUser(userId: string, data: any) {
+    const response = await axios.put(\`\${this.baseUrl}/users/\${userId}\`, data);
+    return response.data;
+  }
+
+  async deleteUser(userId: string) {
+    return axios.delete(\`\${this.baseUrl}/users/\${userId}\`);
+  }
 }
 
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}`,
+export const apiService = new ApiService();`,
 };
 
 const Index = () => {
@@ -417,27 +564,9 @@ const Index = () => {
     toast.success("Changes applied");
   };
 
-  const handleAnalyze = () => {
-    // TODO: Implement analyze functionality
-    toast.info("Analyze feature coming soon!");
-  };
 
-  const handleConnectGitHub = () => {
-    // TODO: Implement GitHub connection
-    toast.info("GitHub integration coming soon!");
-  };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsCodeReviewerOpen(prev => !prev);
-      }
-    };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   const getLanguageFromExt = (ext: string): string => {
     switch (ext) {
@@ -467,6 +596,18 @@ const Index = () => {
 
   const { settings } = useSettings();
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCodeReviewerOpen(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden bg-background">
       {error && (
@@ -474,7 +615,7 @@ const Index = () => {
           <p className="text-sm text-destructive">{error}</p>
         </div>
       )}
-      <EditorHeader fileName={currentFile} onOpenCodeReviewer={() => setIsCodeReviewerOpen(true)} />
+       <EditorHeader fileName={currentFile} onOpenCodeReviewer={() => setIsCodeReviewerOpen(true)} />
 
       {settings.experimental.tabBar && (
         <TabBar
@@ -530,6 +671,9 @@ const Index = () => {
             </div>
           </Panel>
 
+
+         </PanelGroup>
+
         {isCodeReviewerOpen && (
           <CodeReviewerSidebar
             currentFile={currentFile}
@@ -537,11 +681,8 @@ const Index = () => {
             onClose={() => setIsCodeReviewerOpen(false)}
             onOpenDiff={handleOpenDiff}
             onApplyChanges={handleApplyChanges}
-            onAnalyze={handleAnalyze}
-            onConnectGitHub={handleConnectGitHub}
           />
         )}
-        </PanelGroup>
       </div>
     </div>
   );
