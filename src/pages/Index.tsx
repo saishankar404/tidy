@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { EditorSidebar, FileItem } from "@/components/EditorSidebar";
 import { EditorHeader } from "@/components/EditorHeader";
 import { CodeEditor } from "@/components/CodeEditor";
+import { TabBar } from "@/components/TabBar";
+import { CodeReviewerSidebar } from "@/components/CodeReviewerSidebar";
+import { useSettings } from "@/lib/SettingsContext";
 import { toast } from "sonner";
 
 const initialFiles: FileItem[] = [
@@ -128,10 +132,31 @@ export function debounce<T extends (...args: any[]) => any>(
 const Index = () => {
   const [files, setFiles] = useState<FileItem[]>(initialFiles);
   const [contents, setContents] = useState<Record<string, string>>(fileContents);
-  const [currentFile, setCurrentFile] = useState("src/index.tsx");
+  const [openFiles, setOpenFiles] = useState<string[]>(["src/index.tsx"]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [modifiedFiles, setModifiedFiles] = useState<Set<string>>(new Set());
+  const [isCodeReviewerOpen, setIsCodeReviewerOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleFileSelect = (filePath: string) => {
-    setCurrentFile(filePath);
+  const handleFileSelect = async (filePath: string) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const index = openFiles.indexOf(filePath);
+      if (index === -1) {
+        setOpenFiles([...openFiles, filePath]);
+        setActiveIndex(openFiles.length);
+      } else {
+        setActiveIndex(index);
+      }
+    } catch (err) {
+      setError(`Failed to open file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      toast.error("Failed to open file");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const findAndUpdateTree = (
@@ -203,7 +228,8 @@ const Index = () => {
       ...prev,
       [path]: `// New file: ${fileName}\n`,
     }));
-    setCurrentFile(path);
+    setOpenFiles([...openFiles, path]);
+    setActiveIndex(openFiles.length);
   };
 
   const handleFolderAdd = (folderName: string, parentPath?: string) => {
@@ -247,8 +273,8 @@ const Index = () => {
       });
     }
 
-    if (currentFile === oldPath) {
-      setCurrentFile(newPath);
+    if (openFiles.includes(oldPath)) {
+      setOpenFiles(openFiles.map(f => f === oldPath ? newPath : f));
     }
   };
 
@@ -267,9 +293,15 @@ const Index = () => {
       return newContents;
     });
 
-    if (currentFile === filePath) {
-      const allPaths = Object.keys(contents).filter((p) => p !== filePath);
-      setCurrentFile(allPaths.length > 0 ? allPaths[0] : "");
+    const index = openFiles.indexOf(filePath);
+    if (index !== -1) {
+      const newOpenFiles = openFiles.filter(f => f !== filePath);
+      setOpenFiles(newOpenFiles);
+      if (activeIndex >= newOpenFiles.length) {
+        setActiveIndex(Math.max(0, newOpenFiles.length - 1));
+      } else if (activeIndex === index) {
+        // stay at same index if possible
+      }
     }
   };
 
@@ -311,18 +343,101 @@ const Index = () => {
         });
       }
 
-      if (currentFile === fromPath) {
-        setCurrentFile(newPath);
+      if (openFiles.includes(fromPath)) {
+        setOpenFiles(openFiles.map(f => f === fromPath ? newPath : f));
       }
     }
   };
 
   const handleContentChange = (newContent: string) => {
-    setContents((prev) => ({
-      ...prev,
-      [currentFile]: newContent,
-    }));
+    const currentFile = openFiles[activeIndex];
+    if (currentFile) {
+      setContents((prev) => ({
+        ...prev,
+        [currentFile]: newContent,
+      }));
+      setModifiedFiles(new Set([...modifiedFiles, currentFile]));
+    }
   };
+
+  const handleSave = () => {
+    const currentFile = openFiles[activeIndex];
+    if (currentFile) {
+      setModifiedFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentFile);
+        return newSet;
+      });
+      toast.success("Saved");
+    }
+  };
+
+  const handleTabClick = (index: number) => {
+    setActiveIndex(index);
+  };
+
+  const handleTabClose = (index: number) => {
+    const newOpenFiles = openFiles.filter((_, i) => i !== index);
+    setOpenFiles(newOpenFiles);
+    if (activeIndex >= newOpenFiles.length) {
+      setActiveIndex(Math.max(0, newOpenFiles.length - 1));
+    } else if (activeIndex > index) {
+      setActiveIndex(activeIndex - 1);
+    }
+  };
+
+  const handleTabReorder = (fromIndex: number, toIndex: number) => {
+    const newOpenFiles = [...openFiles];
+    const [moved] = newOpenFiles.splice(fromIndex, 1);
+    newOpenFiles.splice(toIndex, 0, moved);
+    setOpenFiles(newOpenFiles);
+    if (activeIndex === fromIndex) {
+      setActiveIndex(toIndex);
+    } else if (activeIndex > fromIndex && activeIndex <= toIndex) {
+      setActiveIndex(activeIndex - 1);
+    } else if (activeIndex < fromIndex && activeIndex >= toIndex) {
+      setActiveIndex(activeIndex + 1);
+    }
+  };
+
+  const handleOpenDiff = (title: string, diffContent: string) => {
+    const diffFileName = `Diff: ${title}`;
+    const diffPath = `diff://${title}`;
+    setContents(prev => ({ ...prev, [diffPath]: diffContent }));
+    setOpenFiles([...openFiles, diffPath]);
+    setActiveIndex(openFiles.length);
+  };
+
+  const handleApplyChanges = (filePath: string, newContent: string) => {
+    setContents(prev => ({
+      ...prev,
+      [filePath]: newContent,
+    }));
+    setModifiedFiles(new Set([...modifiedFiles, filePath]));
+    toast.success("Changes applied");
+  };
+
+  const handleAnalyze = () => {
+    // TODO: Implement analyze functionality
+    toast.info("Analyze feature coming soon!");
+  };
+
+  const handleConnectGitHub = () => {
+    // TODO: Implement GitHub connection
+    toast.info("GitHub integration coming soon!");
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCodeReviewerOpen(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const getLanguageFromExt = (ext: string): string => {
     switch (ext) {
@@ -343,21 +458,41 @@ const Index = () => {
     }
   };
 
+  const currentFile = openFiles[activeIndex] || "";
   const currentFileData = contents[currentFile];
   const getCurrentLanguage = () => {
     const ext = currentFile.split(".").pop() || "";
     return getLanguageFromExt(ext);
   };
 
+  const { settings } = useSettings();
+
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden bg-background">
-      <EditorHeader fileName={currentFile} />
+      {error && (
+        <div className="bg-destructive/10 border-b border-destructive/20 px-4 py-2">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
+      <EditorHeader fileName={currentFile} onOpenCodeReviewer={() => setIsCodeReviewerOpen(true)} />
+
+      {settings.experimental.tabBar && (
+        <TabBar
+          openFiles={openFiles}
+          activeIndex={activeIndex}
+          modifiedFiles={modifiedFiles}
+          onTabClick={handleTabClick}
+          onTabClose={handleTabClose}
+          onTabReorder={handleTabReorder}
+        />
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         <div className="w-64 flex-shrink-0">
           <EditorSidebar
             files={files}
-            currentFile={currentFile}
+            openFiles={openFiles}
+            activeIndex={activeIndex}
             fileContents={contents}
             onFileSelect={handleFileSelect}
             onFileAdd={handleFileAdd}
@@ -368,19 +503,45 @@ const Index = () => {
           />
         </div>
 
-        <div className="flex-1 overflow-hidden">
-          {currentFileData ? (
-            <CodeEditor
-              content={currentFileData}
-              language={getCurrentLanguage()}
-              onChange={handleContentChange}
-            />
-          ) : (
-            <div className="h-full flex items-center justify-center bg-editor-bg animate-fade-in">
-              <p className="text-muted-foreground text-sm">No file selected</p>
+        <PanelGroup direction="horizontal" className="flex-1">
+          <Panel defaultSize={70} minSize={30}>
+            <div className="h-full overflow-hidden">
+              {isLoading ? (
+                <div className="h-full flex items-center justify-center bg-editor-bg animate-fade-in">
+                  <div className="text-center space-y-2">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                    <p className="text-muted-foreground text-sm">Loading...</p>
+                  </div>
+                </div>
+              ) : currentFileData ? (
+                <CodeEditor
+                  content={currentFileData}
+                  language={getCurrentLanguage()}
+                  onChange={handleContentChange}
+                  enableMinimap={settings.experimental.minimap}
+                  onSave={handleSave}
+                  isDiff={currentFile.startsWith('diff://')}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center bg-editor-bg animate-fade-in">
+                  <p className="text-muted-foreground text-sm">No file selected</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </Panel>
+
+        {isCodeReviewerOpen && (
+          <CodeReviewerSidebar
+            currentFile={currentFile}
+            currentFileData={currentFileData}
+            onClose={() => setIsCodeReviewerOpen(false)}
+            onOpenDiff={handleOpenDiff}
+            onApplyChanges={handleApplyChanges}
+            onAnalyze={handleAnalyze}
+            onConnectGitHub={handleConnectGitHub}
+          />
+        )}
+        </PanelGroup>
       </div>
     </div>
   );

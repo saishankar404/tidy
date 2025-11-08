@@ -19,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { useSettings } from "@/lib/SettingsContext";
 
 export interface FileItem {
   name: string;
@@ -30,7 +31,8 @@ export interface FileItem {
 
 interface EditorSidebarProps {
   files: FileItem[];
-  currentFile: string;
+  openFiles: string[];
+  activeIndex: number;
   fileContents: Record<string, string>;
   onFileSelect: (filePath: string) => void;
   onFileAdd: (fileName: string, folderPath?: string) => void;
@@ -48,7 +50,8 @@ interface HoverPreview {
 
 export function EditorSidebar({
   files,
-  currentFile,
+  openFiles = [],
+  activeIndex = 0,
   fileContents,
   onFileSelect,
   onFileAdd,
@@ -57,6 +60,8 @@ export function EditorSidebar({
   onFileDelete,
   onFileMove,
 }: EditorSidebarProps) {
+  const currentFile = openFiles[activeIndex] || "";
+  const { settings } = useSettings();
   const [searchQuery, setSearchQuery] = useState("");
   const [renamingItem, setRenamingItem] = useState<string | null>(null);
   const [newItemName, setNewItemName] = useState("");
@@ -186,9 +191,11 @@ export function EditorSidebar({
 
   const handleMouseEnter = (e: React.MouseEvent, item: FileItem) => {
     if (item.type !== "file") return;
-    
+
+    console.log('Hover enter', item.name);
+
     const content = fileContents[item.path] || "";
-    
+
     // Clear any existing timeouts
     if (hoverTimeoutRef.current) {
       clearTimeout(hoverTimeoutRef.current);
@@ -197,7 +204,7 @@ export function EditorSidebar({
       clearTimeout(previewTimeoutRef.current);
     }
 
-    // Set new timeout for hover delay (400ms for smooth experience)
+    // Set new timeout for hover delay (200ms for smooth experience)
     hoverTimeoutRef.current = setTimeout(() => {
       const rect = e.currentTarget.getBoundingClientRect();
       setHoverPreview({
@@ -205,7 +212,8 @@ export function EditorSidebar({
         position: { x: rect.right + 12, y: rect.top },
         fileName: item.name,
       });
-    }, 400);
+      console.log('Show preview', item.name);
+    }, 200);
   };
 
   const handleMouseLeave = () => {
@@ -218,7 +226,7 @@ export function EditorSidebar({
     // Delay hiding preview slightly for smoother experience
     previewTimeoutRef.current = setTimeout(() => {
       setHoverPreview(null);
-    }, 100);
+    }, 300);
   };
 
   useEffect(() => {
@@ -228,8 +236,26 @@ export function EditorSidebar({
     };
   }, []);
 
-  const renderFileTree = (items: FileItem[], depth = 0, parentPath = ""): React.ReactNode => {
+  const renderFileTree = (items: FileItem[], depth = 0, parentPath = "", visitedPaths = new Set<string>()): React.ReactNode => {
+    // Prevent infinite recursion with depth limit and circular reference check
+    if (depth > 20) {
+      console.warn('Maximum folder depth exceeded, stopping recursion');
+      return null;
+    }
+
     return items.map((item, index) => {
+      // Check for circular references
+      if (visitedPaths.has(item.path)) {
+        console.warn(`Circular reference detected for path: ${item.path}`);
+        return null;
+      }
+      const newVisitedPaths = new Set(visitedPaths);
+      newVisitedPaths.add(item.path);
+      // Check for circular references
+      if (visitedPaths.has(item.path)) {
+        console.warn(`Circular reference detected for path: ${item.path}`);
+        return null;
+      }
       const isExpanded = expandedFolders.has(item.path);
       const isSelected = currentFile === item.path;
       const isDraggedOver = dropTarget === item.path;
@@ -353,7 +379,7 @@ export function EditorSidebar({
 
           {item.type === "folder" && isExpanded && item.children && (
             <div className="overflow-hidden transition-all duration-200">
-              {renderFileTree(item.children, depth + 1, item.path)}
+              {renderFileTree(item.children, depth + 1, item.path, newVisitedPaths)}
             </div>
           )}
         </div>
@@ -418,24 +444,24 @@ export function EditorSidebar({
                   autoFocus
                   value={newItemInput}
                   onChange={(e) => setNewItemInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      isCreatingFolder ? handleCreateFolder() : handleCreate();
-                    }
-                    if (e.key === "Escape") {
-                      setIsCreating(false);
-                      setIsCreatingFolder(false);
-                      setNewItemInput("");
-                    }
-                  }}
-                  onBlur={() => {
-                    if (newItemInput.trim()) {
-                      isCreatingFolder ? handleCreateFolder() : handleCreate();
-                    } else {
-                      setIsCreating(false);
-                      setIsCreatingFolder(false);
-                    }
-                  }}
+                   onKeyDown={(e) => {
+                     if (e.key === "Enter") {
+                       void (isCreatingFolder ? handleCreateFolder() : handleCreate());
+                     }
+                     if (e.key === "Escape") {
+                       setIsCreating(false);
+                       setIsCreatingFolder(false);
+                       setNewItemInput("");
+                     }
+                   }}
+                   onBlur={() => {
+                     if (newItemInput.trim()) {
+                       void (isCreatingFolder ? handleCreateFolder() : handleCreate());
+                     } else {
+                       setIsCreating(false);
+                       setIsCreatingFolder(false);
+                     }
+                   }}
                   placeholder={isCreatingFolder ? "folder-name" : "filename.tsx"}
                   className="h-7 text-xs font-mono"
                 />
@@ -458,18 +484,22 @@ export function EditorSidebar({
         {/* Hover Preview */}
         {hoverPreview && (
           <div
-            className="fixed z-50 squircle bg-popover border border-border shadow-lg p-3 w-72 animate-preview-in pointer-events-none"
+            className="fixed z-50 bg-popover border border-border shadow-lg rounded-lg p-4 w-80 animate-preview-in pointer-events-none"
             style={{
-              left: `${hoverPreview.position.x}px`,
+              left: `${hoverPreview.position.x - 280}px`,
               top: `${hoverPreview.position.y}px`,
             }}
           >
-            <div className="text-xs font-mono text-muted-foreground mb-2 font-medium">
+            <div className="text-sm font-mono text-foreground mb-2 font-medium">
               {hoverPreview.fileName}
             </div>
-            <pre className="text-[10px] font-mono text-foreground/80 overflow-hidden whitespace-pre-wrap leading-relaxed">
-              {hoverPreview.content}
-              {hoverPreview.content.length >= 300 && "..."}
+            <div className="text-xs text-muted-foreground mb-3 space-y-1">
+              <div>Size: {hoverPreview.content.length} chars</div>
+              <div>Modified: Just now</div>
+            </div>
+            <pre className="text-[11px] font-mono text-foreground/90 overflow-hidden whitespace-pre-wrap leading-relaxed bg-muted/50 p-2 rounded">
+              {hoverPreview.content.slice(0, 200)}
+              {hoverPreview.content.length >= 200 && "..."}
             </pre>
           </div>
         )}

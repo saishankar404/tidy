@@ -1,11 +1,13 @@
-import { Sparkles, Settings } from "lucide-react";
+import { Sparkles, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SettingsSheet } from "@/components/SettingsSheet";
 
 interface EditorHeaderProps {
   fileName: string;
+  onOpenCodeReviewer: () => void;
 }
 
-export function EditorHeader({ fileName }: EditorHeaderProps) {
+export function EditorHeader({ fileName, onOpenCodeReviewer }: EditorHeaderProps) {
   return (
     <header className="h-12 bg-card border-b border-border flex items-center justify-between px-4 animate-fade-in">
       <div className="flex items-center gap-3">
@@ -16,23 +18,17 @@ export function EditorHeader({ fileName }: EditorHeaderProps) {
         <span className="text-xs text-muted-foreground">Saved</span>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-2 transition-all duration-200 hover:bg-muted"
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          <span className="text-xs">Analyze</span>
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 transition-all duration-200 hover:bg-muted"
-        >
-          <Settings className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+       <div className="flex items-center gap-2">
+         <Button
+           variant="ghost"
+           size="icon"
+           onClick={onOpenCodeReviewer}
+           className="h-8 w-8 transition-all duration-200 hover:bg-muted"
+         >
+           <Bot className="h-4 w-4" />
+         </Button>
+         <SettingsSheet />
+       </div>
     </header>
   );
 }
