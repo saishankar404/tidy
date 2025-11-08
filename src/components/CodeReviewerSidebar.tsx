@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Bot, Check, X as XIcon, Zap, ChevronDown, ChevronUp, Sparkles, GitBranch, Send, History, Copy, BookOpen, Settings, Play, Clock, Shield, BarChart3, Wrench, FileText, TestTube } from "lucide-react";
+import { X, Bot, Check, X as XIcon, Zap, ChevronDown, ChevronUp, ChevronLeft, Sparkles, GitBranch, Send, History, Copy, BookOpen, Settings, Play, Clock, Shield, BarChart3, Wrench, FileText, TestTube } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,7 +16,7 @@ import { useSettings } from "@/lib/SettingsContext";
 import { GeminiService } from "@/lib/geminiApi";
 import { snippetStorage } from "@/lib/snippetStorage";
 import { CodeSnippet } from "@/lib/analysis/types";
-import { toast } from "sonner";
+import { toast } from "@/hooks/use-toast";
 import { DiffViewer } from "@/components/DiffViewer";
 
 // Simple HTML sanitization function to prevent XSS
@@ -24,6 +24,34 @@ const sanitizeHtml = (text: string): string => {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+};
+
+// Function to render message content with code blocks
+const renderMessageContent = (content: string) => {
+  const parts = content.split(/(```[\w]*\n[\s\S]*?\n```)/g);
+
+  return parts.map((part, index) => {
+    if (part.startsWith('```') && part.endsWith('```')) {
+      // Extract language and code
+      const match = part.match(/```(\w*)\n([\s\S]*?)\n```/);
+      if (match) {
+        const [, language, code] = match;
+        return (
+          <pre key={index} className="bg-gray-900 text-gray-100 p-3 rounded-md my-2 overflow-x-auto text-xs">
+            <code className={`language-${language || 'text'}`}>
+              {code}
+            </code>
+          </pre>
+        );
+      }
+    }
+    // Regular text
+    return (
+      <span key={index} className="whitespace-pre-wrap">
+        {sanitizeHtml(part)}
+      </span>
+    );
+  });
 };
 
 // Chat storage utilities
@@ -102,11 +130,31 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
     const navigate = useNavigate();
     const [shouldAnalyze, setShouldAnalyze] = useState(false);
     const [selectedAnalyses, setSelectedAnalyses] = useState<string[]>(ANALYSIS_PRESETS.quick);
+
+  // Calculate estimated time based on selected analyses
+  const getEstimatedTime = (analyses: string[]) => {
+    const timePerAnalysis = 5; // seconds per analysis
+    return analyses.length * timePerAnalysis;
+  };
+
+  const getAnalysisType = (analyses: string[]) => {
+    if (analyses.length === 2 && analyses.includes('codeQuality') && analyses.includes('security')) {
+      return 'Quick Review';
+    }
+    if (analyses.length === 3 && analyses.includes('codeQuality') && analyses.includes('security') && analyses.includes('performance')) {
+      return 'Standard Review';
+    }
+    if (analyses.length === 6) {
+      return 'Full Review';
+    }
+    return 'Custom Review';
+  };
     const { data, loading, error, progress, cancelAnalysis } = useAIReview(currentFileData || '', currentFile, 'typescript', shouldAnalyze, selectedAnalyses);
       const [selectedSuggestion, setSelectedSuggestion] = useState<SuggestionItem | null>(null);
       const [isResolving, setIsResolving] = useState(false);
       const [showDiffViewer, setShowDiffViewer] = useState(false);
       const [pendingChanges, setPendingChanges] = useState<{ filePath: string; originalContent: string; newContent: string } | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
      const [expandedWalkthroughFiles, setExpandedWalkthroughFiles] = useState<Set<string>>(new Set());
     const [showChat, setShowChat] = useState(false);
     const [chatMode, setChatMode] = useState(false);
@@ -265,7 +313,10 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
       setSelectedSuggestion(null);
       setPendingChanges(null);
       setShowDiffViewer(false);
-      toast.success("Changes applied successfully!");
+      toast({
+        title: "Success!",
+        description: "Changes applied successfully",
+      });
     }
   };
 
@@ -273,6 +324,71 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
     setSelectedSuggestion(null);
     setPendingChanges(null);
     setShowDiffViewer(false);
+  };
+
+  const handleRetryAnalysis = () => {
+    setRetryCount(prev => prev + 1);
+    setShouldAnalyze(true);
+    onAnalyze?.();
+  };
+
+  const getErrorMessage = (error: string) => {
+    if (error.includes('API key') || error.includes('authentication')) {
+      return {
+        title: 'API Configuration Issue',
+        message: 'Please check your Gemini API key in settings.',
+        action: 'Open Settings',
+        actionFn: () => {
+          // Could open settings modal or navigate to settings
+          toast({
+            title: "API Key Required",
+            description: "Please configure your API key in settings",
+            variant: "destructive",
+          });
+        }
+      };
+    }
+    if (error.includes('quota') || error.includes('rate limit')) {
+      return {
+        title: 'API Quota Exceeded',
+        message: 'You\'ve reached your API usage limit. Try again later.',
+        action: 'Retry Later',
+        actionFn: () => setRetryCount(0)
+      };
+    }
+    if (error.includes('network') || error.includes('timeout')) {
+      return {
+        title: 'Connection Issue',
+        message: 'Unable to connect to AI services. Check your internet connection.',
+        action: 'Retry',
+        actionFn: handleRetryAnalysis
+      };
+    }
+    return {
+      title: 'Analysis Failed',
+      message: error,
+      action: 'Retry',
+      actionFn: handleRetryAnalysis
+    };
+  };
+
+  const handleQuickApply = (suggestion: SuggestionItem) => {
+    if (suggestion.fixedCode) {
+      onApplyChanges(suggestion.filePath, suggestion.fixedCode);
+      toast({
+        title: "Quick fix applied!",
+        description: "Code improvement has been applied",
+      });
+    }
+  };
+
+  // Determine if a suggestion can be quick-applied
+  const canQuickApply = (suggestion: SuggestionItem) => {
+    // Quick apply for low-risk, high-confidence fixes
+    return suggestion.impactLevel === 'low' ||
+           suggestion.title.toLowerCase().includes('missing') ||
+           suggestion.title.toLowerCase().includes('unused') ||
+           suggestion.title.toLowerCase().includes('formatting');
   };
 
   const handleReject = () => {
@@ -459,12 +575,19 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <h3 className="text-lg font-medium text-foreground">Analyzing your code...</h3>
-                <p className="text-sm text-muted-foreground">{currentAnalyzer}</p>
-                <Progress value={progressPercent} className="w-full" />
-                <p className="text-xs text-muted-foreground">{progress?.current || 0} of {progress?.total || 6} completed</p>
-              </div>
+               <div className="space-y-2">
+                 <h3 className="text-lg font-medium text-foreground">
+                   {getAnalysisType(selectedAnalyses)} in progress...
+                 </h3>
+                 <p className="text-sm text-muted-foreground">
+                   {currentAnalyzer ? `Analyzing ${currentAnalyzer}...` : 'Preparing analysis...'}
+                 </p>
+                 <Progress value={progressPercent} className="w-full" />
+                 <div className="flex justify-between items-center text-xs text-muted-foreground">
+                   <span>{progress?.current || 0} of {progress?.total || selectedAnalyses.length} completed</span>
+                   <span>~{Math.max(1, getEstimatedTime(selectedAnalyses) - Math.floor((progress?.current || 0) * getEstimatedTime(selectedAnalyses) / (progress?.total || selectedAnalyses.length)))}s remaining</span>
+                 </div>
+               </div>
 
               <div className="flex justify-center space-x-1">
                 <div className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
@@ -493,20 +616,28 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
     return (
       <div className="h-full bg-background border-l border-border flex flex-col font-inter">
         <div className="h-12 px-3 py-2 border-b border-border flex items-center justify-between bg-muted/20">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowChat(false)}
-              className="h-6 w-6 rounded hover:bg-muted/50"
-            >
-              <ChevronDown className="h-3 w-3 rotate-90" />
-            </Button>
-            <h2 className="text-sm font-medium text-foreground">Chat with Tidy</h2>
-          </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="h-6 w-6 rounded hover:bg-muted/50">
-            <X className="h-3 w-3" />
-          </Button>
+           <div className="flex items-center gap-2">
+             <Button
+               variant="ghost"
+               size="sm"
+               onClick={() => setShowChat(false)}
+               className="h-7 px-2 text-xs hover:bg-muted/50"
+               title="Back to Analysis"
+             >
+               <ChevronLeft className="h-3 w-3 mr-1" />
+               Back
+             </Button>
+             <h2 className="text-sm font-medium text-foreground">Chat with Tidy</h2>
+           </div>
+           <Button
+             variant="ghost"
+             size="icon"
+             onClick={onClose}
+             className="h-6 w-6 rounded hover:bg-muted/50"
+             title="Close Sidebar"
+           >
+             <X className="h-3 w-3" />
+           </Button>
         </div>
 
         <div className="flex-1 flex flex-col">
@@ -514,17 +645,22 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
               {messages.map((message, index) => (
-                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`} style={{ animationDelay: `${index * 100}ms` }}>
-                  <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                    message.role === 'user'
-                      ? 'bg-primary text-primary-foreground ml-4'
-                      : 'bg-muted text-muted-foreground mr-4'
-                  }`}>
-                     <p className="text-sm whitespace-pre-wrap">{sanitizeHtml(message.content)}</p>
-                     <p className="text-xs opacity-70 mt-1">
-                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
+                 <div key={message.id} className="w-full flex justify-start animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
+                    <div className={`max-w-[85%] rounded-lg px-3 py-2 ${
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    }`}>
+                      {message.role === 'user' && (
+                        <div className="text-xs font-medium text-primary-foreground/70 mb-1">You</div>
+                      )}
+                      <div className="text-sm">
+                        {renderMessageContent(message.content)}
+                      </div>
+                      <p className="text-xs opacity-70 mt-1">
+                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                     </p>
+                   </div>
                 </div>
               ))}
               {isTyping && (
@@ -599,13 +735,16 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
                 </div>
               ) : (
                 messages.map((message, index) => (
-                  <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`} style={{ animationDelay: `${index * 100}ms` }}>
-                    <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground ml-4'
-                        : 'bg-muted text-muted-foreground mr-4'
-                    }`}>
-                       {message.codeSuggestion ? (
+                   <div key={message.id} className="w-full flex justify-start animate-fade-in" style={{ animationDelay: `${index * 100}ms` }}>
+                     <div className={`max-w-[85%] rounded-lg px-3 py-2 ${
+                       message.role === 'user'
+                         ? 'bg-primary text-primary-foreground'
+                         : 'bg-muted text-muted-foreground'
+                     }`}>
+                        {message.role === 'user' && (
+                          <div className="text-xs font-medium text-primary-foreground/70 mb-1">You</div>
+                        )}
+                        {message.codeSuggestion ? (
                         <div className="space-y-3">
                           <p className="text-sm font-medium">🤖 {message.codeSuggestion.description}</p>
 
@@ -625,94 +764,92 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
                             </div>
                           </div>
 
-                             <div className="flex gap-2">
-                               <Button
-                                 size="sm"
-                                 variant="outline"
-                                 onClick={async () => {
-                                   try {
-                                     await navigator.clipboard.writeText(message.codeSuggestion!.suggestedSnippet);
-                                     toast({
-                                       title: "Copied to clipboard!",
-                                       description: "Code snippet copied successfully.",
-                                     });
-                                   } catch (error) {
-                                     toast({
-                                       title: "Copy failed",
-                                       description: "Failed to copy to clipboard.",
-                                       variant: "destructive",
-                                     });
-                                   }
-                                 }}
-                                 className={message.codeSuggestion!.type === 'improvement' ? "flex-1" : "flex-1"}
-                               >
-                                 <Copy className="h-3 w-3 mr-1" />
-                                 Copy
-                               </Button>
-                               <Button
-                                 size="sm"
-                                 variant="outline"
-                                 onClick={() => {
-                                   // Auto-detect category and create snippet
-                                   const code = message.codeSuggestion!.suggestedSnippet;
-                                   const description = message.codeSuggestion!.description;
+                              <div className="flex gap-1 flex-wrap">
+                                <Button
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(message.codeSuggestion!.suggestedSnippet);
+                                      toast({
+                                        title: "Copied!",
+                                        description: "Code snippet copied to clipboard",
+                                      });
+                                    } catch (error) {
+                                      toast({
+                                        title: "Copy failed",
+                                        description: "Failed to copy to clipboard",
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }}
+                                  className="bg-black text-white hover:bg-gray-800 text-xs py-1 px-2 h-auto"
+                                >
+                                  <Copy className="h-3 w-3 mr-1" />
+                                  Copy
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    // Auto-detect category and create snippet
+                                    const code = message.codeSuggestion!.suggestedSnippet;
+                                    const description = message.codeSuggestion!.description;
 
-                                   // Simple category detection
-                                   let category: CodeSnippet['category'] = 'utility';
-                                   if (description.toLowerCase().includes('error') || code.includes('try') || code.includes('catch')) {
-                                     category = 'error-handling';
-                                   } else if (description.toLowerCase().includes('security') || code.includes('sanitize') || code.includes('validate')) {
-                                     category = 'security';
-                                   } else if (description.toLowerCase().includes('async') || code.includes('async') || code.includes('await')) {
-                                     category = 'performance';
-                                   }
+                                    // Simple category detection
+                                    let category: CodeSnippet['category'] = 'utility';
+                                    if (description.toLowerCase().includes('error') || code.includes('try') || code.includes('catch')) {
+                                      category = 'error-handling';
+                                    } else if (description.toLowerCase().includes('security') || code.includes('sanitize') || code.includes('validate')) {
+                                      category = 'security';
+                                    } else if (description.toLowerCase().includes('async') || code.includes('async') || code.includes('await')) {
+                                      category = 'performance';
+                                    }
 
-                                   // Auto-generate title
-                                   const title = description.length > 50
-                                     ? description.substring(0, 47) + '...'
-                                     : description;
+                                    // Auto-generate title
+                                    const title = description.length > 50
+                                      ? description.substring(0, 47) + '...'
+                                      : description;
 
-                                   // Auto-detect language
-                                   const language = code.includes('function') || code.includes('const') || code.includes('let')
-                                     ? 'typescript'
-                                     : 'javascript';
+                                    // Auto-detect language
+                                    const language = code.includes('function') || code.includes('const') || code.includes('let')
+                                      ? 'typescript'
+                                      : 'javascript';
 
-                                   // Auto-generate tags
-                                   const tags = [];
-                                   if (code.includes('try') || code.includes('catch')) tags.push('error-handling');
-                                   if (code.includes('async') || code.includes('await')) tags.push('async');
-                                   if (code.includes('function')) tags.push('function');
+                                    // Auto-generate tags
+                                    const tags = [];
+                                    if (code.includes('try') || code.includes('catch')) tags.push('error-handling');
+                                    if (code.includes('async') || code.includes('await')) tags.push('async');
+                                    if (code.includes('function')) tags.push('function');
 
-                                   snippetStorage.saveSnippet({
-                                     title,
-                                     description,
-                                     code,
-                                     language,
-                                     tags,
-                                     category,
-                                     source: 'chat-suggestion',
-                                     metadata: {
-                                       chatContext: 'AI code suggestion from chat',
-                                     },
-                                   });
+                                    snippetStorage.saveSnippet({
+                                      title,
+                                      description,
+                                      code,
+                                      language,
+                                      tags,
+                                      category,
+                                      source: 'chat-suggestion',
+                                      metadata: {
+                                        chatContext: 'AI code suggestion from chat',
+                                      },
+                                    });
 
-                                   toast({
-                                     title: "Snippet saved!",
-                                     description: `Saved to ${category.replace('-', ' ')} category.`,
-                                   });
-                                 }}
-                                 className={message.codeSuggestion!.type === 'improvement' ? "flex-1" : "flex-1"}
-                               >
-                                 <BookOpen className="h-3 w-3 mr-1" />
-                                 Save
-                               </Button>
-                               {message.codeSuggestion!.type === 'improvement' && (
-                                 <Button
-                                   size="sm"
-                                   onClick={() => applyCodeSuggestion(message.codeSuggestion!)}
-                                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                                 >
-                                   Apply
+                                    toast({
+                                      title: "Snippet saved!",
+                                      description: `Saved to ${category.replace('-', ' ')} category`,
+                                    });
+                                  }}
+                                  className="bg-black text-white hover:bg-gray-800 text-xs py-1 px-2 h-auto"
+                                >
+                                  <BookOpen className="h-3 w-3 mr-1" />
+                                  Save
+                                </Button>
+                                {message.codeSuggestion!.type === 'improvement' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => applyCodeSuggestion(message.codeSuggestion!)}
+                                    className="bg-black text-white hover:bg-gray-800 text-xs py-1 px-2 h-auto"
+                                  >
+                                    Apply
                                  </Button>
                                )}
                              </div>
@@ -961,11 +1098,53 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
             <X className="h-3 w-3" />
           </Button>
         </div>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <X className="h-8 w-8 text-destructive mx-auto mb-2" />
-            <p className="text-xs text-muted-foreground">Failed to load review</p>
-            <p className="text-xs text-destructive mt-1">{error}</p>
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-sm space-y-4 text-center">
+            <div className="space-y-3">
+              <div className="relative mx-auto w-12 h-12">
+                <div className="absolute inset-0 border-4 border-destructive/20 rounded-full"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <X className="h-5 w-5 text-destructive" />
+                </div>
+              </div>
+
+              {(() => {
+                const errorInfo = getErrorMessage(error || 'Unknown error');
+                return (
+                  <>
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-medium text-foreground">{errorInfo.title}</h3>
+                      <p className="text-xs text-muted-foreground">{errorInfo.message}</p>
+                    </div>
+
+                     <div className="flex justify-center gap-2">
+                       <Button
+                         size="sm"
+                         onClick={errorInfo.actionFn}
+                         className="bg-black text-white hover:bg-gray-800 text-xs py-1 px-3 h-auto"
+                       >
+                         {errorInfo.action}
+                      </Button>
+                      {retryCount < 2 && (
+                        <Button
+                          size="sm"
+                          onClick={handleRetryAnalysis}
+                          className="h-8 px-3 text-xs"
+                        >
+                          Try Again
+                        </Button>
+                      )}
+                    </div>
+
+                    {retryCount > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Retry attempt {retryCount} of 2
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </div>
       </div>
@@ -1237,18 +1416,31 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
                     </div>
                     <p className="text-xs font-medium mb-1 text-foreground">{item.title}</p>
                     <p className="text-xs text-muted-foreground mb-3">{item.description}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground/70">{item.filePath}</span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleResolve(item)}
-                        className="h-6 px-2 text-xs border-muted-foreground/20 hover:bg-muted/50"
-                      >
-                        <Zap className="h-3 w-3 mr-1" />
-                        Resolve
-                      </Button>
-                    </div>
+                     <div className="flex items-center justify-between">
+                       <span className="text-xs text-muted-foreground/70">{item.filePath}</span>
+                       <div className="flex gap-1">
+                         {canQuickApply(item) && (
+                           <Button
+                             size="sm"
+                             variant="outline"
+                             onClick={() => handleQuickApply(item)}
+                             className="h-6 px-2 text-xs border-green-200 text-green-700 hover:bg-green-50 hover:border-green-300"
+                           >
+                             <Check className="h-3 w-3 mr-1" />
+                             Quick Apply
+                           </Button>
+                         )}
+                         <Button
+                           size="sm"
+                           variant="outline"
+                           onClick={() => handleResolve(item)}
+                           className="h-6 px-2 text-xs border-muted-foreground/20 hover:bg-muted/50"
+                         >
+                           <Zap className="h-3 w-3 mr-1" />
+                           Review
+                         </Button>
+                       </div>
+                     </div>
                   </div>
                 ))}
               </div>
@@ -1317,18 +1509,25 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
                   )}
                 </div>
 
-                <div className="flex items-center justify-end">
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleReject} className="border-muted-foreground/20 hover:bg-muted/50">
-                      <XIcon className="h-4 w-4 mr-2" />
-                      Reject
-                    </Button>
-                    <Button variant="outline" onClick={handleAccept} className="border-muted-foreground/20 hover:bg-muted/50">
-                      <Check className="h-4 w-4 mr-2" />
-                      Accept
-                    </Button>
-                  </div>
-                </div>
+                 <div className="flex items-center justify-end mt-3">
+                   <div className="flex gap-2 w-full">
+                     <Button
+                       variant="outline"
+                       onClick={handleReject}
+                       className="flex-1 bg-black text-white border-black hover:bg-gray-800 hover:border-gray-800 text-xs py-1.5 h-auto"
+                     >
+                       <XIcon className="h-3 w-3 mr-1" />
+                       Reject
+                     </Button>
+                     <Button
+                       onClick={handleAccept}
+                       className="flex-1 bg-black text-white hover:bg-gray-800 text-xs py-1.5 h-auto"
+                     >
+                       <Check className="h-3 w-3 mr-1" />
+                       Accept
+                     </Button>
+                   </div>
+                 </div>
               </>
             )}
           </div>

@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EditorSidebar, FileItem } from "@/components/EditorSidebar";
 import { EditorHeader } from "@/components/EditorHeader";
 import { CodeEditor } from "@/components/CodeEditor";
 import { TabBar } from "@/components/TabBar";
 import { CodeReviewerSidebar } from "@/components/CodeReviewerSidebar";
+import { OnboardingModal } from "@/components/OnboardingModal";
 import { useSettings } from "@/lib/SettingsContext";
 import { toast } from "sonner";
+
+
 
 const initialFiles: FileItem[] = [
   {
@@ -283,6 +287,22 @@ const Index = () => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [modifiedFiles, setModifiedFiles] = useState<Set<string>>(new Set());
   const [isCodeReviewerOpen, setIsCodeReviewerOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Show onboarding for first-time users
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('tidy_onboarding_seen');
+    if (!hasSeenOnboarding) {
+      // Delay showing onboarding to let the editor load first
+      const timer = setTimeout(() => {
+        setShowOnboarding(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -602,6 +622,10 @@ const Index = () => {
         e.preventDefault();
         setIsCodeReviewerOpen(prev => !prev);
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        setIsSidebarOpen(prev => !prev);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -629,20 +653,46 @@ const Index = () => {
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="w-64 flex-shrink-0">
-          <EditorSidebar
-            files={files}
-            openFiles={openFiles}
-            activeIndex={activeIndex}
-            fileContents={contents}
-            onFileSelect={handleFileSelect}
-            onFileAdd={handleFileAdd}
-            onFolderAdd={handleFolderAdd}
-            onFileRename={handleFileRename}
-            onFileDelete={handleFileDelete}
-            onFileMove={handleFileMove}
-          />
-        </div>
+        {isSidebarOpen && (
+          <div className="w-64 flex-shrink-0 flex flex-col">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
+              <span className="text-sm font-medium text-muted-foreground">Files</span>
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className="h-6 w-6 hover:bg-muted rounded transition-colors flex items-center justify-center"
+                title="Hide sidebar (Ctrl+B)"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <EditorSidebar
+                files={files}
+                openFiles={openFiles}
+                activeIndex={activeIndex}
+                fileContents={contents}
+                onFileSelect={handleFileSelect}
+                onFileAdd={handleFileAdd}
+                onFolderAdd={handleFolderAdd}
+                onFileRename={handleFileRename}
+                onFileDelete={handleFileDelete}
+                onFileMove={handleFileMove}
+              />
+            </div>
+          </div>
+        )}
+
+        {!isSidebarOpen && (
+          <div className="h-12 flex items-center border-r border-border bg-muted/30 px-1">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="h-8 w-8 bg-muted hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-center rounded border border-border"
+              title="Show sidebar (Ctrl+B)"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         <PanelGroup direction="horizontal" className="flex-1">
           <Panel defaultSize={isCodeReviewerOpen ? 60 : 100} minSize={30}>
@@ -663,31 +713,39 @@ const Index = () => {
                   onSave={handleSave}
                   isDiff={currentFile.startsWith('diff://')}
                 />
-              ) : (
-                <div className="h-full flex items-center justify-center bg-editor-bg animate-fade-in">
-                  <p className="text-muted-foreground text-sm">No file selected</p>
-                </div>
-              )}
-            </div>
-          </Panel>
+               ) : (
+                 <div className="h-full flex items-center justify-center bg-editor-bg animate-fade-in">
+                   <p className="text-muted-foreground text-sm">No file selected</p>
+                 </div>
+               )}
+             </div>
+           </Panel>
 
-          {isCodeReviewerOpen && (
-            <>
-              <PanelResizeHandle className="w-2 bg-border hover:bg-border/80 transition-colors" />
-              <Panel defaultSize={40} minSize={20} maxSize={80}>
-                <CodeReviewerSidebar
-                  currentFile={currentFile}
-                  currentFileData={currentFileData}
-                  onClose={() => setIsCodeReviewerOpen(false)}
-                  onOpenDiff={handleOpenDiff}
-                  onApplyChanges={handleApplyChanges}
-                />
-              </Panel>
-            </>
-          )}
-        </PanelGroup>
-      </div>
-    </div>
+           {isCodeReviewerOpen && (
+             <>
+               <PanelResizeHandle className="w-2 bg-border hover:bg-border/80 transition-colors" />
+               <Panel defaultSize={40} minSize={20} maxSize={80}>
+                 <CodeReviewerSidebar
+                   currentFile={currentFile}
+                   currentFileData={currentFileData}
+                   onClose={() => setIsCodeReviewerOpen(false)}
+                   onOpenDiff={handleOpenDiff}
+                   onApplyChanges={handleApplyChanges}
+                 />
+               </Panel>
+             </>
+           )}
+         </PanelGroup>
+       </div>
+
+       <OnboardingModal
+         isOpen={showOnboarding}
+         onClose={() => {
+           setShowOnboarding(false);
+           localStorage.setItem('tidy_onboarding_seen', 'true');
+         }}
+       />
+     </div>
   );
 };
 

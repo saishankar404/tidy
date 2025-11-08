@@ -22,13 +22,13 @@ const SnippetCard: React.FC<SnippetCardProps> = ({ snippet, onDelete, onEdit }) 
       await navigator.clipboard.writeText(snippet.code);
       snippetStorage.incrementUsage(snippet.id);
       toast({
-        title: "Copied to clipboard!",
-        description: "Code snippet copied successfully.",
+        title: "Copied!",
+        description: "Code snippet copied to clipboard",
       });
     } catch (error) {
       toast({
         title: "Copy failed",
-        description: "Failed to copy to clipboard.",
+        description: "Failed to copy to clipboard",
         variant: "destructive",
       });
     }
@@ -39,7 +39,7 @@ const SnippetCard: React.FC<SnippetCardProps> = ({ snippet, onDelete, onEdit }) 
       onDelete(snippet.id);
       toast({
         title: "Snippet deleted",
-        description: "Code snippet has been removed from your library.",
+        description: "Code snippet has been removed from your library",
       });
     }
   };

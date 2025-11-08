@@ -3,13 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Plus, BookOpen, TrendingUp, Clock, Star } from 'lucide-react';
+import { Search, Plus, BookOpen, TrendingUp, Clock, Star, ArrowLeft } from 'lucide-react';
 import { snippetStorage } from '@/lib/snippetStorage';
 import { CodeSnippet, SnippetFilters } from '@/lib/analysis/types';
 import SnippetCard from '@/components/SnippetCard';
 import SaveSnippetModal from '@/components/SaveSnippetModal';
+import { useNavigate } from 'react-router-dom';
 
 const SnippetLibrary: React.FC = () => {
+  const navigate = useNavigate();
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [filteredSnippets, setFilteredSnippets] = useState<CodeSnippet[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,10 +94,23 @@ const SnippetLibrary: React.FC = () => {
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Code Snippet Library</h1>
-        <p className="text-muted-foreground">
-          Save and organize your favorite code patterns from AI analysis and chat suggestions
-        </p>
+        <div className="flex items-center gap-4 mb-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/')}
+            className="h-8 w-8"
+            title="Back to Editor"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold">Code Snippet Library</h1>
+            <p className="text-muted-foreground">
+              Save and organize your favorite code patterns from AI analysis and chat suggestions
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Stats Cards */}
