@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Hand, Settings, Plane } from "lucide-react";
-import { color } from "framer-motion";
 
 const AnimatedWorkflow = () => {
   const ref = useRef<HTMLElement>(null);

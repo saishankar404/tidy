@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Check, Code, Zap, FileText, ArrowRight, X } from "lucide-react";
 
@@ -52,6 +52,7 @@ export function OnboardingModal({ isOpen, onClose }: { isOpen: boolean; onClose:
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
+          <DialogTitle className="sr-only">TIDY Onboarding</DialogTitle>
           <div className="flex items-center justify-between">
             <Badge variant="secondary" className="text-xs">
               Step {currentStep + 1} of {ONBOARDING_STEPS.length}
