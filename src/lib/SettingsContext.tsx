@@ -9,7 +9,7 @@ interface Settings {
   ai: {
     enabled: boolean;
     apiKey: string;
-    model: 'gemini-2.5-flash' | 'gemini-1.5-pro' | 'gemini-pro';
+    model: 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.0-flash' | 'gemini-pro';
     temperature: number;
     maxTokens: number;
   };
@@ -25,8 +25,8 @@ const defaultSettings: Settings = {
     enabled: true,
     apiKey: import.meta.env.VITE_GEMINI_API_KEY || '',
     model: 'gemini-2.5-flash',
-    temperature: 0.3,
-    maxTokens: 4096,
+    temperature: 0.2, // Lower for faster, more deterministic completions
+    maxTokens: 4096, // Higher limit for analysis tasks (can be adjusted per task)
   },
 };
 

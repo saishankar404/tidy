@@ -36,12 +36,18 @@ export class ContextAnalyzer {
     editor: monaco.editor.IStandaloneCodeEditor,
     files: FileItem[],
     maxContextSize = 100
-  ): CodeContext {
+  ): CodeContext | null {
     const model = editor.getModel();
-    if (!model) throw new Error('No editor model available');
+    if (!model) {
+      // Silently fail - this is normal during editor initialization
+      return null;
+    }
 
     const position = editor.getPosition();
-    if (!position) throw new Error('No cursor position available');
+    if (!position) {
+      // Silently fail - this is normal during editor initialization
+      return null;
+    }
 
     const fileContent = model.getValue();
     const language = model.getLanguageId();

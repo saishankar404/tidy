@@ -1,13 +1,16 @@
-import { useState, useRef } from "react";
-import { X, Bot, Check, X as XIcon, Zap, ChevronDown, ChevronUp, Sparkles, Github, Send, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Bot, Check, X as XIcon, Zap, ChevronDown, ChevronUp, Sparkles, Github, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useAIReview, type SuggestionItem } from "@/lib/useAIReview";
-import { CodeEditor } from "@/components/CodeEditor";
+import { ChatAssistant, type ChatMessage } from "@/lib/chatAssistant";
+import { useSettings } from "@/lib/SettingsContext";
+import { GeminiService } from "@/lib/geminiApi";
 
 // Simple HTML sanitization function to prevent XSS
 const sanitizeHtml = (text: string): string => {
@@ -26,43 +29,144 @@ interface CodeReviewerSidebarProps {
   onConnectGitHub?: () => void;
 }
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
+
 
 export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onOpenDiff, onApplyChanges, onAnalyze, onConnectGitHub }: CodeReviewerSidebarProps) {
-  const [shouldAnalyze, setShouldAnalyze] = useState(false);
-  const { data, loading, error } = useAIReview(shouldAnalyze ? currentFileData : '');
-  const [selectedSuggestion, setSelectedSuggestion] = useState<SuggestionItem | null>(null);
-  const [isResolving, setIsResolving] = useState(false);
-  const [expandedWalkthroughFiles, setExpandedWalkthroughFiles] = useState<Set<string>>(new Set());
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showChat, setShowChat] = useState(false);
-  const [showPreloader, setShowPreloader] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+   const [shouldAnalyze, setShouldAnalyze] = useState(false);
+   const { data, loading, error, progress } = useAIReview(currentFileData || '', currentFile, 'typescript', shouldAnalyze);
+    const [selectedSuggestion, setSelectedSuggestion] = useState<SuggestionItem | null>(null);
+    const [isResolving, setIsResolving] = useState(false);
+    const [expandedWalkthroughFiles, setExpandedWalkthroughFiles] = useState<Set<string>>(new Set());
+   const [showChat, setShowChat] = useState(false);
+   const [showPreloader, setShowPreloader] = useState(false);
+   const [messages, setMessages] = useState<ChatMessage[]>([]);
+   const [inputMessage, setInputMessage] = useState('');
+   const [isTyping, setIsTyping] = useState(false);
+   const [chatAssistant, setChatAssistant] = useState<ChatAssistant | null>(null);
+   const { settings } = useSettings();
+
+   // Initialize chat assistant when component mounts
+   useEffect(() => {
+     if (settings.ai.enabled && settings.ai.apiKey) {
+       const geminiService = new GeminiService({
+         apiKey: settings.ai.apiKey,
+         model: settings.ai.model,
+         temperature: settings.ai.temperature,
+         maxTokens: settings.ai.maxTokens,
+       });
+
+       const assistant = new ChatAssistant(geminiService);
+       assistant.setContext({
+         code: currentFileData,
+         filePath: currentFile,
+         language: 'typescript',
+         analysisResults: [] // Will be updated when analysis completes
+       });
+       setChatAssistant(assistant);
+     }
+   }, [settings.ai, currentFile, currentFileData]);
+
+    // Update chat context when analysis completes
+    useEffect(() => {
+      if (chatAssistant && data) {
+        // Transform old format to new format for context
+        // For now, we'll create a simple mapping
+        const analysisResults = [
+          {
+            type: 'codeQuality' as const,
+            score: 85,
+            issues: data.fileWalkthrough.codeQuality?.map(item => ({
+              id: `cq-${Math.random()}`,
+              severity: 'medium' as const,
+              title: item.title,
+              description: item.description,
+              category: 'general',
+              confidence: 0.8
+            })) || [],
+            suggestions: [],
+            summary: 'Code quality analysis',
+            metadata: { analysisTime: 0, linesAnalyzed: 0, language: 'typescript' }
+          }
+        ];
+
+        chatAssistant.setContext({
+          code: currentFileData,
+          filePath: currentFile,
+          language: 'typescript',
+          analysisResults
+        });
+      }
+    }, [data, chatAssistant, currentFileData, currentFile]);
 
   const handleResolve = async (suggestion: SuggestionItem) => {
-    setSelectedSuggestion(suggestion);
-    setIsResolving(true);
+     setSelectedSuggestion(suggestion);
+     setIsResolving(true);
 
-    // Simulate AI working
-    await new Promise(resolve => setTimeout(resolve, 3000));
+     try {
+       if (chatAssistant && currentFileData) {
+         // Transform SuggestionItem to Issue format expected by generateFix
+         const issue = {
+           title: suggestion.title,
+           description: suggestion.description,
+           category: 'general', // Default category since SuggestionItem doesn't have one
+           severity: suggestion.impactLevel as 'low' | 'medium' | 'high'
+         };
 
-    setIsResolving(false);
-  };
+          // Generate the fix using AI
+          const result = await chatAssistant.generateFix(issue, currentFileData, currentFile, suggestion.diff);
+
+         // Update the suggestion with the generated diff and store the fixed code
+         setSelectedSuggestion({
+           ...suggestion,
+           diff: result.diff,
+           fixedCode: result.fixedCode
+         });
+       } else {
+         // Fallback: use the existing diff if available, or generate a placeholder
+         setSelectedSuggestion({
+           ...suggestion,
+           diff: suggestion.diff || `// Suggested fix for: ${suggestion.title}\n// ${suggestion.description}\n\n${currentFileData}`,
+           fixedCode: currentFileData
+         });
+       }
+     } catch (error) {
+       console.error('Failed to generate fix:', error);
+       // Fallback to placeholder diff
+       setSelectedSuggestion({
+         ...suggestion,
+         diff: suggestion.diff || `// Could not generate fix for: ${suggestion.title}\n// ${suggestion.description}\n\n${currentFileData}`,
+         fixedCode: currentFileData
+       });
+     } finally {
+       setIsResolving(false);
+     }
+   };
 
   const handleAccept = () => {
-    if (selectedSuggestion) {
-      // Apply the diff changes to the file
-      // For now, we'll just show the diff - in a real implementation,
-      // this would apply the actual changes to the file content
-      onApplyChanges(selectedSuggestion.filePath, currentFileData); // Placeholder
+    if (selectedSuggestion && selectedSuggestion.fixedCode) {
+      // Use the complete fixed code generated by AI
+      onApplyChanges(selectedSuggestion.filePath, selectedSuggestion.fixedCode);
+      setSelectedSuggestion(null);
+    } else if (selectedSuggestion && selectedSuggestion.diff) {
+      // Fallback: Extract the fixed code from the diff
+      // For now, we'll use a simple approach - in a real implementation,
+      // you'd properly apply the diff
+      const lines = selectedSuggestion.diff.split('\n');
+      const fixedLines: string[] = [];
+
+      for (const line of lines) {
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+          // Add line
+          fixedLines.push(line.substring(1));
+        } else if (line.startsWith(' ') || (!line.startsWith('-') && !line.startsWith('+'))) {
+          // Context or unchanged line
+          fixedLines.push(line.startsWith(' ') ? line.substring(1) : line);
+        }
+        // Skip removed lines (starting with -)
+      }
+
+      const fixedCode = fixedLines.join('\n');
+      onApplyChanges(selectedSuggestion.filePath, fixedCode);
       setSelectedSuggestion(null);
     }
   };
@@ -71,13 +175,7 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
     setSelectedSuggestion(null);
   };
 
-  const calculateDiffStats = (oldContent: string, newContent: string) => {
-    const oldLines = oldContent.split('\n');
-    const newLines = newContent.split('\n');
-    const added = newLines.length - oldLines.length;
-    const removed = oldLines.length - newLines.length;
-    return { added: Math.max(0, added), removed: Math.max(0, removed), files: 1 };
-  };
+
 
   const calculateDiffStatsFromDiff = (diff: string) => {
     const lines = diff.split('\n');
@@ -107,52 +205,45 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
     });
   };
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+   const handleSendMessage = async () => {
+     if (!inputMessage.trim() || !chatAssistant) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: sanitizeHtml(inputMessage),
-      timestamp: new Date(),
-    };
+     const userMessage: ChatMessage = {
+       id: Date.now().toString(),
+       role: 'user',
+       content: inputMessage,
+       timestamp: new Date(),
+     };
 
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setIsTyping(true);
+     setMessages(prev => [...prev, userMessage]);
+     setInputMessage('');
+     setIsTyping(true);
 
-    // Simulate AI response
-    await new Promise(resolve => setTimeout(resolve, 2000));
+     try {
+       const aiResponse = await chatAssistant.generateResponse(inputMessage);
+       const aiMessage: ChatMessage = {
+         id: (Date.now() + 1).toString(),
+         role: 'assistant',
+         content: aiResponse,
+         timestamp: new Date(),
+       };
 
-    const aiResponse = generateAIResponse(inputMessage);
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: sanitizeHtml(aiResponse),
-      timestamp: new Date(),
-    };
+       setMessages(prev => [...prev, aiMessage]);
+     } catch (error) {
+       console.error('Chat error:', error);
+       const errorMessage: ChatMessage = {
+         id: (Date.now() + 1).toString(),
+         role: 'assistant',
+         content: "I'm sorry, I encountered an error while processing your message. Please try again.",
+         timestamp: new Date(),
+       };
+       setMessages(prev => [...prev, errorMessage]);
+     } finally {
+       setIsTyping(false);
+     }
+   };
 
-    setMessages(prev => [...prev, aiMessage]);
-    setIsTyping(false);
-  };
 
-  const generateAIResponse = (userInput: string): string => {
-    const input = userInput.toLowerCase();
-
-    if (input.includes('explain') || input.includes('what')) {
-      return "I can help explain that code. Looking at your current file, it appears to be a React component. Would you like me to break down any specific part?";
-    }
-
-    if (input.includes('fix') || input.includes('error')) {
-      return "I can help identify and fix issues in your code. Based on my analysis, I found a few suggestions in the code review section. Would you like me to elaborate on any of them?";
-    }
-
-    if (input.includes('optimize') || input.includes('performance')) {
-      return "For performance optimization, I recommend looking at the file walkthrough section where I identified potential improvements. Would you like me to explain any specific optimization?";
-    }
-
-    return "I'm here to help with your code! I can explain concepts, suggest improvements, fix bugs, or answer questions about your codebase. What would you like to work on?";
-  };
 
   if (loading) {
     return (
@@ -186,7 +277,10 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
   }
 
   // Show preloader during analysis
-  if (showPreloader) {
+  if (showPreloader || loading) {
+    const progressPercent = progress ? (progress.current / progress.total) * 100 : 0;
+    const currentAnalyzer = progress?.currentAnalyzer || 'Initializing';
+
     return (
       <div className="h-full bg-background border-l border-border flex flex-col font-inter">
         <div className="h-12 px-3 py-2 border-b border-border flex items-center justify-between bg-muted/20">
@@ -209,7 +303,9 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
 
               <div className="space-y-2">
                 <h3 className="text-lg font-medium text-foreground">Analyzing your code...</h3>
-                <p className="text-sm text-muted-foreground">This may take a few seconds</p>
+                <p className="text-sm text-muted-foreground">{currentAnalyzer}</p>
+                <Progress value={progressPercent} className="w-full" />
+                <p className="text-xs text-muted-foreground">{progress?.current || 0} of {progress?.total || 6} completed</p>
               </div>
 
               <div className="flex justify-center space-x-1">
@@ -224,17 +320,17 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
     );
   }
 
-  // Show chat interface after analysis
-  if (showChat) {
-    // Initialize messages if empty
-    if (messages.length === 0) {
-      setMessages([{
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: sanitizeHtml(`Hi! I'm Tidy, your AI coding assistant. I've analyzed your code and found some suggestions above. What would you like to know or how can I help you improve your code?`),
-        timestamp: new Date(),
-      }]);
-    }
+   // Show chat interface after analysis
+   if (showChat) {
+     // Initialize messages if empty
+     if (messages.length === 0 && chatAssistant) {
+       setMessages([{
+         id: Date.now().toString(),
+         role: 'assistant',
+         content: `Hi! I'm Tidy, your AI coding assistant. I've analyzed your code and found some suggestions above. What would you like to know or how can I help you improve your code?`,
+         timestamp: new Date(),
+       }]);
+     }
 
     return (
       <div className="h-full bg-background border-l border-border flex flex-col font-inter">
@@ -333,17 +429,17 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
             </div>
 
             <div className="space-y-4">
-              <Button
-                onClick={async () => {
-                  setShowPreloader(true);
+               <Button
+                 onClick={async () => {
+                   setShowPreloader(true);
 
-                  // Show preloader for 2-3 seconds
-                  await new Promise(resolve => setTimeout(resolve, 2500));
+                   // Show preloader for 2-3 seconds
+                   await new Promise(resolve => setTimeout(resolve, 2500));
 
-                  setShowPreloader(false);
-                  setShouldAnalyze(true);
-                  onAnalyze?.();
-                }}
+                   setShowPreloader(false);
+                   setShouldAnalyze(true);
+                   onAnalyze?.();
+                 }}
                 disabled={showPreloader}
                 className="w-full h-12 border-2 border-dashed border-muted-foreground/30 rounded-xl bg-background hover:bg-muted/50 transition-all duration-300 hover:border-muted-foreground/50 hover:shadow-sm disabled:opacity-50"
                 variant="outline"
@@ -742,16 +838,17 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
                   {/* Show diff for the selected suggestion */}
                   <div className="mb-4">
                     <div className="text-xs font-medium text-foreground mb-2">{selectedSuggestion?.filePath}</div>
-                    <pre className="bg-muted/30 border border-border p-3 rounded-md text-xs font-mono overflow-x-auto max-h-40">
-                      {selectedSuggestion?.diff.split('\n').map((line, i) => (
-                        <div key={i} className={cn(
-                          line.startsWith('+') && "text-green-700",
-                          line.startsWith('-') && "text-red-700"
-                        )}>
-                          {line}
-                        </div>
-                      ))}
-                    </pre>
+                     <pre className="bg-muted/30 border border-border p-3 rounded-md text-xs font-mono overflow-x-auto max-h-40">
+                       {selectedSuggestion?.diff.split('\n').map((line, i) => (
+                         <div key={i} className={cn(
+                           line.startsWith('+') && "text-green-600 font-medium",
+                           line.startsWith('-') && "text-red-600 font-medium",
+                           !line.startsWith('+') && !line.startsWith('-') && "text-muted-foreground"
+                         )}>
+                           {line || '\u00A0'}
+                         </div>
+                       ))}
+                     </pre>
                   </div>
 
                   {/* Show additional affected files if any */}

@@ -122,9 +122,10 @@ export function SettingsSheet() {
                     <SelectValue />
                   </SelectTrigger>
                    <SelectContent>
-                     <SelectItem value="gemini-pro">Gemini Pro (Stable)</SelectItem>
-                     <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash (Fast)</SelectItem>
-                     <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro (Advanced)</SelectItem>
+                     <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended - Fast & Smart)</SelectItem>
+                     <SelectItem value="gemini-2.5-pro">Gemini 2.5 Pro (Most Advanced)</SelectItem>
+                     <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash (Stable)</SelectItem>
+                     <SelectItem value="gemini-pro">Gemini Pro (Legacy)</SelectItem>
                    </SelectContent>
                 </Select>
               </div>
