@@ -1,5 +1,6 @@
 import { GeminiService } from '../geminiApi';
 import { CodeContext, AnalysisResult } from './types';
+import { SafeJsonParser } from './safeJsonParser';
 
 export async function analyzeMaintainability(
   context: CodeContext,
@@ -51,115 +52,6 @@ Provide a JSON response with this structure:
   ],
   "summary": "Maintainability assessment summary"
 }`;
-
-  try {
-    const response = await geminiService.generateCompletion(prompt);
-
-    let parsed;
-    try {
-      // Check if response is empty or just whitespace (common with rate limits)
-      if (!response || response.trim().length === 0) {
-        throw new Error('Empty response from API');
-      }
-
-      // Try to extract JSON from the response
-      let jsonText = response;
-      if (response.includes('```json')) {
-        const match = response.match(/```json\s*([\s\S]*?)\s*```/);
-        if (match) {
-          jsonText = match[1];
-        }
-      } else if (response.includes('{') && response.includes('}')) {
-        const start = response.indexOf('{');
-        const end = response.lastIndexOf('}') + 1;
-        if (start >= 0 && end > start) {
-          jsonText = response.substring(start, end);
-        }
-      }
-
-      parsed = JSON.parse(jsonText);
-    } catch (parseError) {
-      console.error('Failed to parse maintainability response as JSON:', parseError);
-
-      // If it's an empty response error, return a fallback
-      if (parseError instanceof Error && (parseError.message.includes('Empty response') || parseError.message.includes('MAX_TOKENS'))) {
-        parsed = {
-          score: 75,
-          issues: [{
-            title: 'Maintainability analysis response truncated',
-            description: 'Response was cut off due to token limits. Consider increasing maxTokens setting.',
-            severity: 'info' as const,
-            category: 'api-limit'
-          }],
-          suggestions: [{
-            title: 'Review maintainability best practices',
-            description: 'Write clean, readable, and maintainable code.',
-            impact: 'medium' as const,
-            explanation: 'Analysis completed but response was truncated due to token limits.'
-          }]
-        };
-      } else {
-        // Parse the text response manually
-        parsed = parseTextResponse(response);
-      }
-    }
-
-    return {
-      type: 'maintainability',
-      score: Math.max(0, Math.min(100, parsed.score || 75)),
-      issues: parsed.issues || [{
-        id: 'maintainability-check',
-        severity: 'low' as const,
-        title: 'Maintainability Analysis Completed',
-        description: 'Code maintainability checks performed',
-        category: 'maintainability',
-        confidence: 0.8
-      }],
-      suggestions: parsed.suggestions || [{
-        id: 'maintainability-review',
-        title: 'Review Code Structure',
-        description: 'Consider refactoring for better maintainability',
-        impact: 'medium' as const,
-        effort: 'medium' as const,
-        explanation: 'Well-structured code is easier to maintain'
-      }],
-      summary: parsed.summary || 'Maintainability analysis completed',
-      metadata: {
-        analysisTime: Date.now() - startTime,
-        linesAnalyzed: context.content.split('\n').length,
-        language: context.language
-      }
-    };
-  } catch (error) {
-    console.error('Maintainability analysis failed:', error);
-
-    return {
-      type: 'maintainability',
-      score: 75,
-      issues: [{
-        id: 'maintainability-fallback',
-        severity: 'low' as const,
-        title: 'Maintainability Check Completed',
-        description: 'Basic maintainability analysis performed',
-        category: 'maintainability',
-        confidence: 0.6
-      }],
-      suggestions: [{
-        id: 'maintainability-improvement',
-        title: 'Consider Code Refactoring',
-        description: 'Review code for potential structural improvements',
-        impact: 'medium' as const,
-        effort: 'medium' as const,
-        explanation: 'Refactoring improves code maintainability'
-      }],
-      summary: 'Maintainability analysis completed with basic checks',
-      metadata: {
-        analysisTime: Date.now() - startTime,
-        linesAnalyzed: context.content.split('\n').length,
-        language: context.language
-      }
-    };
-  }
 
   function parseTextResponse(response: string) {
     const issues: any[] = [];
@@ -251,6 +143,77 @@ Provide a JSON response with this structure:
       issues,
       suggestions,
       summary: response.substring(0, 200) + (response.length > 200 ? '...' : '')
+    };
+  }
+
+  try {
+    const response = await geminiService.generateCompletion(prompt);
+
+    let parsed;
+    try {
+      // Use the secure JSON parser
+      parsed = SafeJsonParser.parse(response);
+    } catch (parseError) {
+      console.error('Failed to parse maintainability response as JSON:', parseError);
+
+      // Use the safe fallback response
+      parsed = SafeJsonParser.createFallbackResponse('maintainability', parseError as Error);
+    }
+
+    return {
+      type: 'maintainability',
+      score: Math.max(0, Math.min(100, parsed.score || 75)),
+      issues: parsed.issues || [{
+        id: 'maintainability-check',
+        severity: 'low' as const,
+        title: 'Maintainability Analysis Completed',
+        description: 'Code maintainability checks performed',
+        category: 'maintainability',
+        confidence: 0.8
+      }],
+      suggestions: parsed.suggestions || [{
+        id: 'maintainability-review',
+        title: 'Review Code Structure',
+        description: 'Consider refactoring for better maintainability',
+        impact: 'medium' as const,
+        effort: 'medium' as const,
+        explanation: 'Well-structured code is easier to maintain'
+      }],
+      summary: parsed.summary || 'Maintainability analysis completed',
+      metadata: {
+        analysisTime: Date.now() - startTime,
+        linesAnalyzed: context.content.split('\n').length,
+        language: context.language
+      }
+    };
+  } catch (error) {
+    console.error('Maintainability analysis failed:', error);
+
+    return {
+      type: 'maintainability',
+      score: 75,
+      issues: [{
+        id: 'maintainability-fallback',
+        severity: 'low' as const,
+        title: 'Maintainability Check Completed',
+        description: 'Basic maintainability analysis performed',
+        category: 'maintainability',
+        confidence: 0.6
+      }],
+      suggestions: [{
+        id: 'maintainability-improvement',
+        title: 'Consider Code Refactoring',
+        description: 'Review code for potential structural improvements',
+        impact: 'medium' as const,
+        effort: 'medium' as const,
+        explanation: 'Refactoring improves code maintainability'
+      }],
+      summary: 'Maintainability analysis completed with basic checks',
+      metadata: {
+        analysisTime: Date.now() - startTime,
+        linesAnalyzed: context.content.split('\n').length,
+        language: context.language
+      }
     };
   }
 }

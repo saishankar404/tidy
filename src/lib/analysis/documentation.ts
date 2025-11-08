@@ -1,5 +1,6 @@
 import { GeminiService } from '../geminiApi';
 import { CodeContext, AnalysisResult } from './types';
+import { SafeJsonParser } from './safeJsonParser';
 
 export async function analyzeDocumentation(
   context: CodeContext,
@@ -51,115 +52,6 @@ Provide a JSON response with this structure:
   ],
   "summary": "Documentation assessment summary"
 }`;
-
-  try {
-    const response = await geminiService.generateCompletion(prompt);
-
-    let parsed;
-    try {
-      // Check if response is empty or just whitespace (common with rate limits)
-      if (!response || response.trim().length === 0) {
-        throw new Error('Empty response from API');
-      }
-
-      // Try to extract JSON from the response
-      let jsonText = response;
-      if (response.includes('```json')) {
-        const match = response.match(/```json\s*([\s\S]*?)\s*```/);
-        if (match) {
-          jsonText = match[1];
-        }
-      } else if (response.includes('{') && response.includes('}')) {
-        const start = response.indexOf('{');
-        const end = response.lastIndexOf('}') + 1;
-        if (start >= 0 && end > start) {
-          jsonText = response.substring(start, end);
-        }
-      }
-
-      parsed = JSON.parse(jsonText);
-    } catch (parseError) {
-      console.error('Failed to parse documentation response as JSON:', parseError);
-
-      // If it's an empty response error, return a fallback
-      if (parseError instanceof Error && (parseError.message.includes('Empty response') || parseError.message.includes('MAX_TOKENS'))) {
-        parsed = {
-          score: 60,
-          issues: [{
-            title: 'Documentation analysis response truncated',
-            description: 'Response was cut off due to token limits. Consider increasing maxTokens setting.',
-            severity: 'info' as const,
-            category: 'api-limit'
-          }],
-          suggestions: [{
-            title: 'Review documentation best practices',
-            description: 'Add comprehensive documentation to your code.',
-            impact: 'low' as const,
-            explanation: 'Analysis completed but response was truncated due to token limits.'
-          }]
-        };
-      } else {
-        // Parse the text response manually
-        parsed = parseTextResponse(response);
-      }
-    }
-
-    return {
-      type: 'documentation',
-      score: Math.max(0, Math.min(100, parsed.score || 60)),
-      issues: parsed.issues || [{
-        id: 'documentation-check',
-        severity: 'low' as const,
-        title: 'Documentation Analysis Completed',
-        description: 'Code documentation checks performed',
-        category: 'documentation',
-        confidence: 0.8
-      }],
-      suggestions: parsed.suggestions || [{
-        id: 'documentation-review',
-        title: 'Add Code Documentation',
-        description: 'Consider adding JSDoc comments and README documentation',
-        impact: 'medium' as const,
-        effort: 'medium' as const,
-        explanation: 'Good documentation improves code maintainability'
-      }],
-      summary: parsed.summary || 'Documentation analysis completed',
-      metadata: {
-        analysisTime: Date.now() - startTime,
-        linesAnalyzed: context.content.split('\n').length,
-        language: context.language
-      }
-    };
-  } catch (error) {
-    console.error('Documentation analysis failed:', error);
-
-    return {
-      type: 'documentation',
-      score: 60,
-      issues: [{
-        id: 'documentation-fallback',
-        severity: 'low' as const,
-        title: 'Documentation Check Completed',
-        description: 'Basic documentation analysis performed',
-        category: 'documentation',
-        confidence: 0.6
-      }],
-      suggestions: [{
-        id: 'documentation-improvement',
-        title: 'Improve Documentation',
-        description: 'Consider adding comments and documentation for better code understanding',
-        impact: 'medium' as const,
-        effort: 'medium' as const,
-        explanation: 'Documentation helps other developers understand the code'
-      }],
-      summary: 'Documentation analysis completed with basic checks',
-      metadata: {
-        analysisTime: Date.now() - startTime,
-        linesAnalyzed: context.content.split('\n').length,
-        language: context.language
-      }
-    };
-  }
 
   function parseTextResponse(response: string) {
     const issues: any[] = [];
@@ -251,6 +143,77 @@ Provide a JSON response with this structure:
       issues,
       suggestions,
       summary: response.substring(0, 200) + (response.length > 200 ? '...' : '')
+    };
+  }
+
+  try {
+    const response = await geminiService.generateCompletion(prompt);
+
+    let parsed;
+    try {
+      // Use the secure JSON parser
+      parsed = SafeJsonParser.parse(response);
+    } catch (parseError) {
+      console.error('Failed to parse documentation response as JSON:', parseError);
+
+      // Use the safe fallback response
+      parsed = SafeJsonParser.createFallbackResponse('documentation', parseError as Error);
+    }
+
+    return {
+      type: 'documentation',
+      score: Math.max(0, Math.min(100, parsed.score || 60)),
+      issues: parsed.issues || [{
+        id: 'documentation-check',
+        severity: 'low' as const,
+        title: 'Documentation Analysis Completed',
+        description: 'Code documentation checks performed',
+        category: 'documentation',
+        confidence: 0.8
+      }],
+      suggestions: parsed.suggestions || [{
+        id: 'documentation-review',
+        title: 'Add Code Documentation',
+        description: 'Consider adding JSDoc comments and README documentation',
+        impact: 'medium' as const,
+        effort: 'medium' as const,
+        explanation: 'Good documentation improves code maintainability'
+      }],
+      summary: parsed.summary || 'Documentation analysis completed',
+      metadata: {
+        analysisTime: Date.now() - startTime,
+        linesAnalyzed: context.content.split('\n').length,
+        language: context.language
+      }
+    };
+  } catch (error) {
+    console.error('Documentation analysis failed:', error);
+
+    return {
+      type: 'documentation',
+      score: 60,
+      issues: [{
+        id: 'documentation-fallback',
+        severity: 'low' as const,
+        title: 'Documentation Check Completed',
+        description: 'Basic documentation analysis performed',
+        category: 'documentation',
+        confidence: 0.6
+      }],
+      suggestions: [{
+        id: 'documentation-improvement',
+        title: 'Improve Documentation',
+        description: 'Consider adding comments and documentation for better code understanding',
+        impact: 'medium' as const,
+        effort: 'medium' as const,
+        explanation: 'Documentation helps other developers understand the code'
+      }],
+      summary: 'Documentation analysis completed with basic checks',
+      metadata: {
+        analysisTime: Date.now() - startTime,
+        linesAnalyzed: context.content.split('\n').length,
+        language: context.language
+      }
     };
   }
 }

@@ -1,5 +1,6 @@
 import { GeminiService } from '../geminiApi';
 import { CodeContext, AnalysisResult } from './types';
+import { SafeJsonParser } from './safeJsonParser';
 
 function parseTextResponse(response: string) {
   const issues: any[] = [];
@@ -152,27 +153,8 @@ Provide a JSON response with this structure:
 
     let parsed;
     try {
-      // Check if response is empty or just whitespace (common with rate limits)
-      if (!response || response.trim().length === 0) {
-        throw new Error('Empty response from API');
-      }
-
-      // Try to extract JSON from the response
-      let jsonText = response;
-      if (response.includes('```json')) {
-        const match = response.match(/```json\s*([\s\S]*?)\s*```/);
-        if (match) {
-          jsonText = match[1];
-        }
-      } else if (response.includes('{') && response.includes('}')) {
-        const start = response.indexOf('{');
-        const end = response.lastIndexOf('}') + 1;
-        if (start >= 0 && end > start) {
-          jsonText = response.substring(start, end);
-        }
-      }
-
-      parsed = JSON.parse(jsonText);
+      // Use the secure JSON parser
+      parsed = SafeJsonParser.parse(response);
     } catch (parseError) {
       console.error('Failed to parse performance response as JSON:', parseError);
 
@@ -181,17 +163,22 @@ Provide a JSON response with this structure:
         parsed = {
           score: 80,
           issues: [{
+            id: 'performance-api-limit',
             title: 'Performance analysis response truncated',
             description: 'Response was cut off due to token limits. Consider increasing maxTokens setting.',
-            severity: 'info' as const,
-            category: 'api-limit'
+            severity: 'low' as const,
+            category: 'api-limit',
+            confidence: 0.6
           }],
           suggestions: [{
+            id: 'performance-best-practices',
             title: 'Review performance best practices',
             description: 'Optimize code for better performance and efficiency.',
             impact: 'medium' as const,
+            effort: 'medium' as const,
             explanation: 'Analysis completed but response was truncated due to token limits.'
-          }]
+          }],
+          summary: 'Performance analysis completed with truncated response'
         };
       } else {
         // Parse the text response manually

@@ -1,5 +1,6 @@
 import { GeminiService } from '../geminiApi';
 import { CodeContext, AnalysisResult } from './types';
+import { SafeJsonParser } from './safeJsonParser';
 
 function parseTextResponse(response: string) {
   const issues: any[] = [];
@@ -149,52 +150,13 @@ IMPORTANT: Respond ONLY with a valid JSON object in this exact structure (no mar
 
     let parsed;
     try {
-      // Check if response is empty or just whitespace (common with rate limits)
-      if (!response || response.trim().length === 0) {
-        throw new Error('Empty response from API');
-      }
-
-      // Try to extract JSON from the response if it's wrapped in markdown or text
-      let jsonText = response;
-      if (response.includes('```json')) {
-        const match = response.match(/```json\s*([\s\S]*?)\s*```/);
-        if (match) {
-          jsonText = match[1];
-        }
-      } else if (response.includes('{') && response.includes('}')) {
-        // Try to find JSON object in the text
-        const start = response.indexOf('{');
-        const end = response.lastIndexOf('}') + 1;
-        if (start >= 0 && end > start) {
-          jsonText = response.substring(start, end);
-        }
-      }
-
-      parsed = JSON.parse(jsonText);
+      // Use the secure JSON parser
+      parsed = SafeJsonParser.parse(response);
     } catch (parseError) {
       console.error('Failed to parse code quality response as JSON:', parseError);
 
-      // If it's an empty response error, return a fallback
-      if (parseError instanceof Error && (parseError.message.includes('Empty response') || parseError.message.includes('MAX_TOKENS'))) {
-        parsed = {
-          score: 85,
-          issues: [{
-            title: 'Code quality analysis response truncated',
-            description: 'Response was cut off due to token limits. Consider increasing maxTokens setting.',
-            severity: 'info' as const,
-            category: 'api-limit'
-          }],
-          suggestions: [{
-            title: 'Review code quality best practices',
-            description: 'Follow consistent coding standards and best practices.',
-            impact: 'medium' as const,
-            explanation: 'Analysis completed but response was truncated due to token limits.'
-          }]
-        };
-      } else {
-        // Parse the text response manually
-        parsed = parseTextResponse(response);
-      }
+      // Use the safe fallback response
+      parsed = SafeJsonParser.createFallbackResponse('codeQuality', parseError as Error);
     }
 
     return {

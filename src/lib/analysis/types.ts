@@ -69,3 +69,33 @@ export interface AnalysisError {
   error: string;
   fallback?: boolean;
 }
+
+export interface CodeSnippet {
+  id: string;
+  title: string;
+  description: string;
+  code: string;
+  language: string;
+  tags: string[];
+  category: 'security' | 'performance' | 'error-handling' | 'ui' | 'utility' | 'custom';
+  source: 'chat-suggestion' | 'analysis-result' | 'manual' | 'chat-request';
+  createdAt: Date;
+  lastUsed?: Date;
+  usageCount: number;
+  metadata: {
+    originalFile?: string;
+    analysisType?: string;
+    confidence?: number;
+    chatContext?: string;
+  };
+}
+
+export interface SnippetFilters {
+  search?: string;
+  category?: string;
+  tags?: string[];
+  language?: string;
+  source?: string;
+  sortBy?: 'createdAt' | 'lastUsed' | 'usageCount' | 'title';
+  sortOrder?: 'asc' | 'desc';
+}

@@ -6,7 +6,14 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
-}
+   codeSuggestion?: {
+     description: string;
+     originalSnippet: string;
+     suggestedSnippet: string;
+     applyCommand: string;
+     type: 'snippet' | 'improvement';
+   };
+};
 
 export interface ChatContext {
   code?: string;
@@ -44,7 +51,254 @@ export class ChatAssistant {
     }
   }
 
-  async generateResponse(userMessage: string): Promise<string> {
+  // Parse markdown responses from AI to extract code suggestions
+  parseMarkdownResponse(markdownText: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string } | null {
+    try {
+      // Extract code blocks from markdown
+      const codeBlockRegex = /```(?:\w+)?\n?([\s\S]*?)```/g;
+      const matches = [...markdownText.matchAll(codeBlockRegex)];
+
+      if (matches.length >= 1) {
+        // Extract description (everything before first code block)
+        const firstCodeBlockIndex = markdownText.indexOf('```');
+        const description = markdownText.substring(0, firstCodeBlockIndex).trim();
+
+        // Clean up description
+        const cleanDescription = description
+          .replace(/^[*]*\s*/, '') // Remove leading asterisks
+          .replace(/\s*[*]*$/, '') // Remove trailing asterisks
+          .replace(/\*\*/g, '') // Remove bold markers
+          .trim();
+
+        if (matches.length >= 2) {
+          // Has both before and after code
+          return {
+            description: cleanDescription || 'Code improvement suggestion',
+            originalSnippet: matches[0][1].trim(),
+            suggestedSnippet: matches[1][1].trim(),
+            applyCommand: `replace:${matches[0][1].trim()}:${matches[1][1].trim()}`
+          };
+        } else {
+          // Only one code block - assume it's the improved version
+          return {
+            description: cleanDescription || 'Code improvement suggestion',
+            originalSnippet: this.context.code?.substring(0, 100) + '...' || '// Original code',
+            suggestedSnippet: matches[0][1].trim(),
+            applyCommand: `replace:${this.context.code?.substring(0, 100) + '...' || ''}:${matches[0][1].trim()}`
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to parse markdown response:', error);
+    }
+    return null;
+  }
+
+  // Generate code improvement suggestions for demo
+  async generateCodeSuggestion(userRequest: string, code: string): Promise<{ description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string } | null> {
+    const request = userRequest.toLowerCase();
+
+    // Expanded pattern matching for more improvement types
+    const patterns = {
+      errorHandling: ['error handling', 'add try catch', 'catch errors', 'handle errors'],
+      async: ['async', 'make async', 'async function', 'await', 'asynchronous'],
+      types: ['types', 'typescript', 'add types', 'type annotations', 'typing'],
+      performance: ['optimize', 'performance', 'speed up', 'faster', 'efficient'],
+      security: ['security', 'secure', 'sanitize', 'validate', 'safe'],
+      readability: ['readable', 'clean', 'refactor', 'improve', 'better', 'suggestion', 'enhance'],
+      documentation: ['docs', 'document', 'comments', 'javadoc', 'explain'],
+      snippets: ['snippet', 'boilerplate', 'example', 'pattern', 'template', 'code example']
+    };
+
+    // Check for snippet/boilerplate requests
+    if (patterns.snippets.some(p => request.includes(p))) {
+      // Generate AI-powered code snippets based on the request
+      const snippetResult = await this.generateAISnippet(userRequest, code);
+      if (snippetResult) {
+        return snippetResult;
+      }
+      // If AI fails, fallback should still work, but ensure we return something
+      return this.generateFallbackSnippet(userRequest);
+    }
+
+    // Check for error handling improvements
+    if (patterns.errorHandling.some(p => request.includes(p))) {
+      const functionMatch = code.match(/function\s+(\w+)\s*\([^)]*\)\s*{[^}]*}/s);
+      if (functionMatch) {
+        const functionCode = functionMatch[0];
+        const functionName = functionMatch[1];
+
+        const improvedCode = functionCode.replace(
+          /function\s+(\w+)\s*\([^)]*\)\s*{([^}]*)}/s,
+          (match, name, body) => {
+            const indentedBody = body.trim().split('\n').map(line => '    ' + line.trim()).join('\n');
+            return `async function ${name}() {\n  try {\n${indentedBody}\n  } catch (error) {\n    console.error('Error in ${name}:', error);\n    throw error;\n  }\n}`;
+          }
+        );
+
+        return {
+          description: `Add error handling to ${functionName} function`,
+          originalSnippet: functionCode,
+          suggestedSnippet: improvedCode,
+          applyCommand: `replace:${functionCode}:${improvedCode}`
+        };
+      }
+    }
+
+    // Check for async improvements
+    if (patterns.async.some(p => request.includes(p))) {
+      const functionMatch = code.match(/function\s+(\w+)\s*\([^)]*\)\s*{[^}]*return[^}]*}/s);
+      if (functionMatch) {
+        const functionCode = functionMatch[0];
+        const improvedCode = functionCode.replace(
+          /function\s+(\w+)\s*\(/,
+          'async function $1('
+        );
+
+        return {
+          description: 'Make function async',
+          originalSnippet: functionCode,
+          suggestedSnippet: improvedCode,
+          applyCommand: `replace:${functionCode}:${improvedCode}`
+        };
+      }
+    }
+
+    // Check for type improvements
+    if (patterns.types.some(p => request.includes(p))) {
+      const functionMatch = code.match(/function\s+(\w+)\s*\(([^)]*)\)/);
+      if (functionMatch) {
+        const functionCode = functionMatch[0];
+        const params = functionMatch[2];
+
+        let improvedCode = functionCode;
+        if (params.trim()) {
+          improvedCode = functionCode.replace(
+            /\(([^)]*)\)/,
+            '($1: any)'
+          );
+        }
+        improvedCode = improvedCode.replace(
+          /function\s+(\w+)/,
+          'function $1'
+        ) + ': any';
+
+        return {
+          description: 'Add TypeScript types',
+          originalSnippet: functionCode,
+          suggestedSnippet: improvedCode,
+          applyCommand: `replace:${functionCode}:${improvedCode}`
+        };
+      }
+    }
+
+    // For general improvement requests or when no specific pattern matches,
+    // generate a general code improvement based on the current code
+    if (patterns.readability.some(p => request.includes(p)) ||
+        request.includes('improve') || request.includes('better') ||
+        request.includes('enhance') || request.includes('suggestion')) {
+
+      // Try to find a function to improve
+      const functionMatch = code.match(/function\s+(\w+)\s*\([^)]*\)\s*{[^}]*}/s);
+      if (functionMatch) {
+        const functionCode = functionMatch[0];
+        const functionName = functionMatch[1];
+
+        // Add JSDoc comments if not present
+        if (!functionCode.includes('/**')) {
+          const improvedCode = `/**
+ * ${functionName} function - improved with documentation
+ */
+${functionCode}`;
+
+          return {
+            description: `Add documentation to ${functionName} function`,
+            originalSnippet: functionCode,
+            suggestedSnippet: improvedCode,
+            applyCommand: `replace:${functionCode}:${improvedCode}`
+          };
+        }
+
+        // If already has docs, suggest adding error handling
+        if (!functionCode.includes('try') && !functionCode.includes('catch')) {
+          const improvedCode = functionCode.replace(
+            /function\s+(\w+)\s*\([^)]*\)\s*{([^}]*)}/s,
+            (match, name, body) => {
+              const indentedBody = body.trim().split('\n').map(line => '  ' + line.trim()).join('\n');
+              return `function ${name}() {\n  try {\n${indentedBody}\n  } catch (error) {\n    console.error('Error in ${name}:', error);\n    throw error;\n  }\n}`;
+            }
+          );
+
+          return {
+            description: `Add error handling to ${functionName} function`,
+            originalSnippet: functionCode,
+            suggestedSnippet: improvedCode,
+            applyCommand: `replace:${functionCode}:${improvedCode}`
+          };
+        }
+      }
+
+      // If no function found, try to improve variable declarations or general code
+      if (code.includes('const') || code.includes('let')) {
+        // Suggest using const over let where appropriate
+        let improvedCode = code;
+
+        // Simple heuristic: suggest const for variables that appear to be constants
+        improvedCode = improvedCode.replace(/\blet\s+(\w+)\s*=\s*([^;]+);/g, (match, varName, value) => {
+          // If it's a primitive value or array/object literal, suggest const
+          if (/^['"`\[\{]/.test(value.trim()) || /^\d/.test(value.trim()) || value.trim() === 'true' || value.trim() === 'false' || value.trim() === 'null' || value.trim() === 'undefined') {
+            return `const ${varName} = ${value};`;
+          }
+          return match; // Keep as let for complex expressions
+        });
+
+        if (improvedCode !== code) {
+          return {
+            description: 'Use const instead of let for variables that are not reassigned',
+            originalSnippet: code.substring(0, 200) + '...',
+            suggestedSnippet: improvedCode.substring(0, 200) + '...',
+            applyCommand: `replace:${code}:${improvedCode}`
+          };
+        }
+      }
+
+      // Look for console.log statements to suggest removing them
+      if (code.includes('console.log')) {
+        const improvedCode = code.replace(/^\s*console\.log\([^)]+\);\s*$/gm, '');
+
+        if (improvedCode !== code) {
+          return {
+            description: 'Remove console.log statements for production code',
+            originalSnippet: code.match(/^\s*console\.log\([^)]+\);\s*$/gm)?.[0] || 'console.log(...);',
+            suggestedSnippet: '',
+            applyCommand: `replace:${code.match(/^\s*console\.log\([^)]+\);\s*$/gm)?.[0] || 'console.log(...);'}:`
+          };
+        }
+      }
+
+      // Look for missing return type annotations in TypeScript
+      if (code.includes('function') && !code.includes(': ')) {
+        const functionMatch = code.match(/function\s+(\w+)\s*\([^)]*\)/);
+        if (functionMatch) {
+          const functionDecl = functionMatch[0];
+          const improvedCode = code.replace(functionDecl, `${functionDecl}: void`);
+
+          return {
+            description: 'Add return type annotation to function',
+            originalSnippet: functionDecl,
+            suggestedSnippet: `${functionDecl}: void`,
+            applyCommand: `replace:${functionDecl}:${functionDecl}: void`
+          };
+        }
+      }
+    }
+
+    // For other improvement types, return null to let AI handle it
+    // This will be caught by the markdown parser
+    return null;
+  }
+
+  async generateResponse(userMessage: string): Promise<string | { type: 'code_suggestion'; data: { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } }> {
     // Add user message to history
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -53,6 +307,93 @@ export class ChatAssistant {
       timestamp: new Date()
     };
     this.addMessage(userMsg);
+
+    // Check if this is a code improvement request
+    const codeRequest = userMessage.toLowerCase();
+    if (codeRequest.includes('improve') || codeRequest.includes('fix') ||
+        codeRequest.includes('error handling') || codeRequest.includes('async') ||
+        codeRequest.includes('types') || codeRequest.includes('typescript') ||
+        codeRequest.includes('optimize') || codeRequest.includes('performance') ||
+        codeRequest.includes('security') || codeRequest.includes('readable') ||
+        codeRequest.includes('clean') || codeRequest.includes('refactor') ||
+        codeRequest.includes('docs') || codeRequest.includes('document') ||
+        codeRequest.includes('comments') || codeRequest.includes('better') ||
+        codeRequest.includes('suggestion') || codeRequest.includes('enhance') ||
+        codeRequest.includes('snippet') || codeRequest.includes('boilerplate') ||
+        codeRequest.includes('example') || codeRequest.includes('pattern')) {
+
+      // Try pattern matching first (handles snippets and specific improvement types)
+      const patternSuggestion = await this.generateCodeSuggestion(userMessage, this.context.code || '');
+      if (patternSuggestion) {
+        return {
+          type: 'code_suggestion',
+          data: patternSuggestion
+        };
+      }
+
+       // For general improvement requests, try to generate a suggestion from current code
+       if (codeRequest.includes('improve') || codeRequest.includes('better') ||
+           codeRequest.includes('suggestion') || codeRequest.includes('enhance') ||
+           codeRequest.includes('fix') || codeRequest.includes('error') ||
+           codeRequest.includes('optimize') || codeRequest.includes('refactor') ||
+           codeRequest.includes('clean') || codeRequest.includes('make') ||
+           codeRequest.includes('resolve') || codeRequest.includes('address') ||
+           codeRequest.includes('performance') || codeRequest.includes('speed') ||
+           codeRequest.includes('efficient') || codeRequest.includes('faster')) {
+
+        // First check if we have analysis results to suggest from
+        if (this.context.analysisResults && this.context.analysisResults.length > 0) {
+          // Try to generate a specific suggestion based on analysis results
+          const analysisSuggestion = this.generateSuggestionFromAnalysis(userMessage);
+          if (analysisSuggestion) {
+            return {
+              type: 'code_suggestion',
+              data: analysisSuggestion
+            };
+          }
+          return "I can see you've run code analysis! Check the analysis results above - there are specific suggestions you can apply. Would you like me to help you implement any of those improvements?";
+        }
+
+        // If no analysis results, try AI-powered improvement generation first
+        const aiImprovement = await this.generateAIImprovement(userMessage, this.context.code || '');
+        if (aiImprovement) {
+          return {
+            type: 'code_suggestion',
+            data: aiImprovement
+          };
+        }
+
+        // Fall back to pattern-based improvements
+        const generalSuggestion = this.generateGeneralImprovement(this.context.code || '');
+        if (generalSuggestion) {
+          return {
+            type: 'code_suggestion',
+            data: generalSuggestion
+          };
+        }
+
+        // If we can't generate a specific suggestion, create a generic improvement suggestion
+        // This ensures improvement requests always get code suggestion UI instead of plain text
+        const code = this.context.code || '';
+        if (code.trim()) {
+          return {
+            type: 'code_suggestion',
+            data: {
+              description: 'General code improvement suggestions',
+              originalSnippet: code.substring(0, 100) + (code.length > 100 ? '...' : ''),
+              suggestedSnippet: `// TODO: Consider these improvements:\n// 1. Add proper error handling\n// 2. Add JSDoc comments\n// 3. Use const/let appropriately\n// 4. Consider TypeScript types\n${code}`,
+              applyCommand: `replace:${code.substring(0, 100) + (code.length > 100 ? '...' : '')}: // TODO: Consider these improvements:\n// 1. Add proper error handling\n// 2. Add JSDoc comments\n// 3. Use const/let appropriately\n// 4. Consider TypeScript types\n${code}`,
+              type: 'improvement'
+            }
+          };
+        }
+
+        // Only fall through to AI processing if there's no code context at all
+      }
+
+      // If no pattern match, this will fall through to AI processing below
+      // The AI response will be parsed for markdown code blocks
+    }
 
     // Build context-aware prompt
     const prompt = this.buildPrompt(userMessage);
@@ -75,13 +416,13 @@ export class ChatAssistant {
       const fallbackResponse = this.generateFallbackResponse(userMessage);
 
       // Add fallback response to history
-      const assistantMsg: ChatMessage = {
+      const fallbackMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: fallbackResponse,
         timestamp: new Date()
       };
-      this.addMessage(assistantMsg);
+      this.addMessage(fallbackMsg);
 
       return fallbackResponse;
     }
@@ -146,7 +487,244 @@ Assistant: Provide a helpful, concise response. Focus on being practical and act
       return "Security is paramount in development. The security analysis should have identified potential vulnerabilities. Let me know what specific security concerns you have, and I can provide guidance on best practices.";
     }
 
+    // Note: Improvement requests are now handled above in generateResponse
+    // This fallback should not be reached for improvement requests
+
     return "I'm here to help you with your code! I can explain concepts, suggest improvements, help fix bugs, or answer questions about your codebase. What would you like to work on? Feel free to ask me anything about programming, best practices, or your specific code.";
+  }
+
+  // Generate suggestions based on analysis results
+  private generateSuggestionFromAnalysis(userMessage: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string } | null {
+    if (!this.context.analysisResults || this.context.analysisResults.length === 0) {
+      return null;
+    }
+
+    const request = userMessage.toLowerCase();
+
+    // Look for issues that match the user's request
+    for (const analysis of this.context.analysisResults) {
+      for (const issue of analysis.issues) {
+        const issueText = (issue.title + ' ' + issue.description).toLowerCase();
+
+        // Match user request with issue type
+        if ((request.includes('error') || request.includes('fix')) && issue.category.toLowerCase().includes('error')) {
+          return this.generateFixForIssue(issue, this.context.code || '');
+        }
+        if ((request.includes('security') || request.includes('secure')) && issue.category.toLowerCase().includes('security')) {
+          return this.generateFixForIssue(issue, this.context.code || '');
+        }
+        if ((request.includes('performance') || request.includes('optimize')) && issue.category.toLowerCase().includes('performance')) {
+          return this.generateFixForIssue(issue, this.context.code || '');
+        }
+        if ((request.includes('type') || request.includes('typescript')) && issue.category.toLowerCase().includes('type')) {
+          return this.generateFixForIssue(issue, this.context.code || '');
+        }
+      }
+    }
+
+    // If no specific match, return the first high-priority issue
+    const highPriorityIssues = this.context.analysisResults
+      .flatMap(r => r.issues)
+      .filter(issue => issue.severity === 'high')
+      .sort((a, b) => b.severity.localeCompare(a.severity));
+
+    if (highPriorityIssues.length > 0) {
+      return this.generateFixForIssue(highPriorityIssues[0], this.context.code || '');
+    }
+
+    return null;
+  }
+
+  private generateFixForIssue(issue: Issue, code: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } | null {
+    // Simple fix generation based on issue type
+    const issueTitle = issue.title.toLowerCase();
+
+    if (issueTitle.includes('error handling') || issueTitle.includes('try catch')) {
+      const result = this.applyErrorHandlingPattern(code);
+      if (result) {
+        return {
+          description: `Add error handling to improve code reliability`,
+          originalSnippet: code,
+          suggestedSnippet: result.fixedCode,
+          applyCommand: `replace:${code}:${result.fixedCode}`,
+          type: 'improvement'
+        };
+      }
+    }
+
+    if (issueTitle.includes('type safety') || issueTitle.includes('typescript')) {
+      const result = this.applyTypeSafetyPattern(code);
+      if (result) {
+        return {
+          description: `Improve type safety in the code`,
+          originalSnippet: code,
+          suggestedSnippet: result.fixedCode,
+          applyCommand: `replace:${code}:${result.fixedCode}`,
+          type: 'improvement'
+        };
+      }
+    }
+
+    if (issueTitle.includes('security') || issueTitle.includes('sanitize')) {
+      const result = this.applySecurityPattern(code);
+      if (result) {
+        return {
+          description: `Address security issue: ${issue.title}`,
+          originalSnippet: code,
+          suggestedSnippet: result.fixedCode,
+          applyCommand: `replace:${code}:${result.fixedCode}`,
+          type: 'improvement'
+        };
+      }
+    }
+
+    // For other issues, provide a generic suggestion
+    return {
+      description: `Address ${issue.category} issue: ${issue.title}`,
+      originalSnippet: code.substring(0, 100) + '...',
+      suggestedSnippet: `// TODO: ${issue.description}\n${code}`,
+      applyCommand: `replace:${code.substring(0, 100) + '...'}: // TODO: ${issue.description}\n${code}`,
+      type: 'improvement'
+    };
+  }
+
+  // Generate a general code improvement without requiring full analysis
+  private generateGeneralImprovement(code: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } | null {
+    if (!code || code.trim().length === 0) {
+      return null;
+    }
+
+    // Look for functions that could use improvements
+    const functionMatches = code.match(/function\s+(\w+)\s*\([^)]*\)\s*{[^}]*}/g);
+    if (functionMatches) {
+      for (const funcMatch of functionMatches) {
+        const funcNameMatch = funcMatch.match(/function\s+(\w+)/);
+        if (funcNameMatch) {
+          const funcName = funcNameMatch[1];
+
+          // Check if function has JSDoc comments
+          const funcStart = code.indexOf(funcMatch);
+          const beforeFunc = code.substring(Math.max(0, funcStart - 200), funcStart);
+          const hasJSDoc = beforeFunc.includes('/**') || beforeFunc.includes('/*');
+
+          if (!hasJSDoc) {
+            // Add JSDoc comment
+            const improvedFunc = `/**
+ * ${funcName} function
+ */
+${funcMatch}`;
+
+            return {
+              description: `Add documentation to the ${funcName} function`,
+              originalSnippet: funcMatch,
+              suggestedSnippet: improvedFunc,
+              applyCommand: `replace:${funcMatch}:${improvedFunc}`,
+              type: 'improvement'
+            };
+          }
+
+          // Check if function has error handling
+          if (!funcMatch.includes('try') && !funcMatch.includes('catch')) {
+            // Add basic error handling
+            const improvedFunc = funcMatch.replace(
+              /function\s+(\w+)\s*\([^)]*\)\s*{([^}]*)}/s,
+              (match, name, body) => {
+                const indentedBody = body.trim().split('\n').map((line: string) => '  ' + line.trim()).join('\n');
+                return `function ${name}() {\n  try {\n${indentedBody}\n  } catch (error) {\n    console.error('Error in ${name}:', error);\n    throw error;\n  }\n}`;
+              }
+            );
+
+            return {
+              description: `Add error handling to the ${funcName} function`,
+              originalSnippet: funcMatch,
+              suggestedSnippet: improvedFunc,
+              applyCommand: `replace:${funcMatch}:${improvedFunc}`,
+              type: 'improvement'
+            };
+          }
+        }
+      }
+    }
+
+    // Look for console.log statements
+    const consoleMatches = code.match(/console\.log\([^)]+\);/g);
+    if (consoleMatches) {
+      const firstConsole = consoleMatches[0];
+      return {
+        description: 'Remove console.log statement for production code',
+        originalSnippet: firstConsole,
+        suggestedSnippet: `// ${firstConsole} // Removed for production`,
+        applyCommand: `replace:${firstConsole}:// ${firstConsole} // Removed for production`,
+        type: 'improvement'
+      };
+    }
+
+    // Look for let declarations that could be const
+    const letMatches = code.match(/let\s+(\w+)\s*=\s*[^;]+;/g);
+    if (letMatches) {
+      for (const letMatch of letMatches) {
+        const varMatch = letMatch.match(/let\s+(\w+)\s*=\s*([^;]+);/);
+        if (varMatch) {
+          const varName = varMatch[1];
+          const value = varMatch[2].trim();
+
+          // Simple heuristic: if it's a primitive or literal, suggest const
+          if (/^['"`\[\{]/.test(value) || /^\d/.test(value) ||
+              value === 'true' || value === 'false' || value === 'null' || value === 'undefined') {
+
+            const constVersion = letMatch.replace('let', 'const');
+            return {
+              description: `Use const instead of let for variable ${varName}`,
+              originalSnippet: letMatch,
+              suggestedSnippet: constVersion,
+              applyCommand: `replace:${letMatch}:${constVersion}`,
+              type: 'improvement'
+            };
+          }
+        }
+      }
+    }
+
+    // Look for functions without return type annotations (TypeScript)
+    const tsFunctionMatches = code.match(/function\s+(\w+)\s*\([^)]*\)\s*{/g);
+    if (tsFunctionMatches) {
+      for (const funcMatch of tsFunctionMatches) {
+        if (!funcMatch.includes(':')) {
+          const funcNameMatch = funcMatch.match(/function\s+(\w+)/);
+          if (funcNameMatch) {
+            const funcName = funcNameMatch[1];
+            const improvedFunc = funcMatch.replace(
+              /function\s+(\w+)\s*\(/,
+              `function ${funcName}(`
+            ) + ': void';
+
+            return {
+              description: `Add return type annotation to ${funcName} function`,
+              originalSnippet: funcMatch,
+              suggestedSnippet: improvedFunc,
+              applyCommand: `replace:${funcMatch}:${improvedFunc}`,
+              type: 'improvement'
+            };
+          }
+        }
+      }
+    }
+
+    // If no specific improvements found, suggest adding a comment
+    if (code.length > 50) {
+      const firstLines = code.split('\n').slice(0, 3).join('\n');
+      const improvedCode = `// Code improvement: Add proper documentation\n${firstLines}`;
+
+      return {
+        description: 'Add documentation comment to improve code readability',
+        originalSnippet: firstLines,
+        suggestedSnippet: improvedCode,
+        applyCommand: `replace:${firstLines}:${improvedCode}`,
+        type: 'improvement'
+      };
+    }
+
+    return null;
   }
 
   getConversationHistory(): ChatMessage[] {
@@ -373,7 +951,7 @@ Return ONLY the corrected code, no explanations or markdown formatting. The code
         const line = lines[i].trim();
         if ((line.includes('ReactDOM.render') || line.includes('createRoot')) && !line.includes('try {')) {
           // Look for the complete render call
-          let renderStart = i;
+          const renderStart = i;
           let renderEnd = i;
           let parenCount = 0;
           let braceCount = 0;
@@ -593,6 +1171,498 @@ Return ONLY the corrected code, no explanations or markdown formatting. The code
     return {
       fixedCode: code,
       diff: suggestionDiff
+    };
+  }
+
+  // Generate AI-powered code snippets using Gemini API
+  private async generateAISnippet(userRequest: string, code: string): Promise<{ description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } | null> {
+    try {
+      const prompt = this.buildSnippetPrompt(userRequest, code);
+      const aiResponse = await this.geminiService.generateCompletion(prompt);
+
+      // First, try to parse the AI response using the structured format
+      const parsedResult = this.parseSnippetResponse(aiResponse, userRequest);
+      if (parsedResult) {
+        console.log('Successfully parsed AI snippet response');
+        return { ...parsedResult, type: 'snippet' };
+      }
+
+      // If structured parsing failed, try more aggressive code extraction
+      console.warn('Structured parsing failed, trying aggressive extraction');
+
+      // Look for any code blocks, even if not properly formatted
+      const codeBlockPatterns = [
+        /```[\w]*\n?([\s\S]*?)```/g,  // Standard markdown code blocks
+        /```\n([\s\S]*?)```/g,         // Code blocks without language
+        /`([\s\S]*?)`/g                // Inline code (as fallback)
+      ];
+
+      for (const pattern of codeBlockPatterns) {
+        const matches = [...aiResponse.matchAll(pattern)];
+        for (const match of matches) {
+          if (match[1] && match[1].trim().length > 5) { // At least 5 chars of code
+            const snippet = match[1].trim();
+            // Basic validation - check if it looks like code
+            if (this.isValidCodeSnippet(snippet)) {
+              console.log('Found valid code via aggressive extraction');
+              const placeholder = this.generateSnippetPlaceholder(userRequest);
+              return {
+                description: `AI-generated code snippet for: ${userRequest}`,
+                originalSnippet: placeholder,
+                suggestedSnippet: snippet,
+                applyCommand: `replace:${placeholder}:${snippet}`,
+                type: 'snippet'
+              };
+            }
+          }
+        }
+      }
+
+      // If no code blocks found, check if the entire response looks like code
+      if (this.isValidCodeSnippet(aiResponse)) {
+        console.log('Using entire AI response as code');
+        const placeholder = this.generateSnippetPlaceholder(userRequest);
+        return {
+          description: `AI-generated code for: ${userRequest}`,
+          originalSnippet: placeholder,
+          suggestedSnippet: aiResponse.trim(),
+          applyCommand: `replace:${placeholder}:${aiResponse.trim()}`,
+          type: 'snippet'
+        };
+      }
+
+      // As a last resort, try to extract any programming constructs
+      const codeConstructs = aiResponse.match(/(?:function|class|const|let|var|if|for|while)\s+[\s\S]+?(?:;|$|})(?:\n|$)/g);
+      if (codeConstructs && codeConstructs.length > 0) {
+        const extractedCode = codeConstructs.join('\n');
+        if (extractedCode.length > 10) {
+          console.log('Extracted code constructs from AI response');
+          const placeholder = this.generateSnippetPlaceholder(userRequest);
+          return {
+            description: `Extracted code from AI response for: ${userRequest}`,
+            originalSnippet: placeholder,
+            suggestedSnippet: extractedCode,
+            applyCommand: `replace:${placeholder}:${extractedCode}`,
+            type: 'snippet'
+          };
+        }
+      }
+
+      // Only fall back to dummy data if all AI extraction attempts fail
+      console.warn('All AI extraction attempts failed, using fallback templates as last resort');
+      return this.generateFallbackSnippet(userRequest);
+
+    } catch (error) {
+      console.warn('AI snippet generation failed, using fallback templates:', error);
+      // Only use dummy data if AI completely fails
+      return this.generateFallbackSnippet(userRequest);
+    }
+  }
+
+  private buildSnippetPrompt(userRequest: string, code: string): string {
+    const language = this.context.language || 'javascript';
+    const currentCode = code || 'No code context available';
+
+    return `You are an expert ${language} developer. Generate a practical, well-documented code snippet based on this request: "${userRequest}"
+
+CRITICAL: You MUST provide ACTUAL CODE, not just descriptions. Include working code examples.
+
+Context:
+- Language: ${language}
+- Current code in file: ${currentCode.substring(0, 500)}${currentCode.length > 500 ? '...' : ''}
+
+Requirements:
+1. Generate COMPLETE, RUNNABLE code that works immediately when copied
+2. Include proper error handling where appropriate
+3. Add JSDoc comments or TypeScript types for clarity
+4. Make it production-ready with best practices
+5. Keep it concise but fully functional
+
+IMPORTANT: Respond with ACTUAL CODE in markdown code blocks. Do NOT just describe what the code should do - PROVIDE THE CODE ITSELF.
+
+Format your response as:
+DESCRIPTION: Brief description of what this snippet does
+
+CODE:
+\`\`\`${language}
+// Your complete, working code here
+// Include all necessary imports, functions, and examples
+\`\`\`
+
+Example of what to provide:
+DESCRIPTION: A utility function to add two numbers with validation
+
+CODE:
+\`\`\`${language}
+/**
+ * Adds two numbers with input validation
+ * @param {number} a - First number
+ * @param {number} b - Second number
+ * @returns {number} The sum of a and b
+ */
+function addNumbers(a, b) {
+  if (typeof a !== 'number' || typeof b !== 'number') {
+    throw new Error('Both arguments must be numbers');
+  }
+  return a + b;
+}
+
+// Example usage:
+const result = addNumbers(5, 3);
+console.log(result); // Output: 8
+\`\`\`
+
+Make sure the code is syntactically correct and immediately runnable.`;
+  }
+
+  private isValidCodeSnippet(text: string): boolean {
+    const codeIndicators = [
+      /\b(function|class|const|let|var|if|for|while|return|export|import)\b/,
+      /[{}();]/,
+      /\b(console|document|window|process|require|module)\b/,
+      /[=+*/<>!&|-]{1,2}/
+    ];
+
+    const hasCodeIndicators = codeIndicators.some(pattern => pattern.test(text));
+    const hasEnoughContent = text.trim().length > 10;
+    const notJustText = !/^[a-zA-Z\s,.!?]+$/.test(text.trim()); // Not just plain English text
+
+    return hasCodeIndicators && hasEnoughContent && notJustText;
+  }
+
+  private async generateAIImprovement(userRequest: string, code: string): Promise<{ description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } | null> {
+    if (!code || code.trim().length === 0) {
+      return null;
+    }
+
+    try {
+      const prompt = `You are an expert code reviewer. Analyze and improve this code based on the request: "${userRequest}"
+
+Current code:
+${code}
+
+Requirements:
+1. Provide SPECIFIC improvements to the existing code
+2. Show both the original problematic code and the improved version
+3. Focus on the most important improvements first
+4. Make sure the improved code is syntactically correct and runnable
+
+Format your response as:
+DESCRIPTION: What improvement this provides
+
+ORIGINAL:
+\`\`\`
+// The original code that needs improvement
+\`\`\`
+
+IMPROVED:
+\`\`\`
+// The improved version
+\`\`\`
+
+Be specific about what you're improving and why. Only suggest changes that actually make the code better.`;
+
+      const aiResponse = await this.geminiService.generateCompletion(prompt, { maxTokens: 4096 });
+
+      // Parse the AI improvement response
+      return this.parseImprovementResponse(aiResponse, code, userRequest);
+
+    } catch (error) {
+      console.warn('AI improvement generation failed:', error);
+      return null;
+    }
+  }
+
+  private parseImprovementResponse(aiResponse: string, originalCode: string, userRequest: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } | null {
+    try {
+      // Extract description
+      const descriptionMatch = aiResponse.match(/DESCRIPTION:\s*(.+?)(?:\n|$)/i);
+      const description = descriptionMatch ? descriptionMatch[1].trim() : `Code improvement for: ${userRequest}`;
+
+      // Extract original code block
+      const originalMatch = aiResponse.match(/ORIGINAL:\s*```[\w]*\n?([\s\S]*?)```/i);
+      const originalSnippet = originalMatch ? originalMatch[1].trim() : originalCode.substring(0, 100) + '...';
+
+      // Extract improved code block
+      const improvedMatch = aiResponse.match(/IMPROVED:\s*```[\w]*\n?([\s\S]*?)```/i);
+      if (improvedMatch && improvedMatch[1].trim()) {
+        const suggestedSnippet = improvedMatch[1].trim();
+
+        return {
+          description,
+          originalSnippet,
+          suggestedSnippet,
+          applyCommand: `replace:${originalSnippet}:${suggestedSnippet}`,
+          type: 'improvement'
+        };
+      }
+
+      // If structured parsing fails, try to find any code improvements
+      const codeBlocks = [...aiResponse.matchAll(/```[\w]*\n?([\s\S]*?)```/g)];
+      if (codeBlocks.length >= 2) {
+        // Assume first block is original, second is improved
+        const suggestedSnippet = codeBlocks[1][1].trim();
+        return {
+          description: description || 'AI-generated code improvement',
+          originalSnippet: codeBlocks[0][1].trim(),
+          suggestedSnippet,
+          applyCommand: `replace:${codeBlocks[0][1].trim()}:${suggestedSnippet}`,
+          type: 'improvement'
+        };
+      }
+
+    } catch (error) {
+      console.warn('Failed to parse AI improvement response:', error);
+    }
+
+    return null;
+  }
+
+  private parseSnippetResponse(aiResponse: string, userRequest: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string } | null {
+    try {
+      // Extract description - look for various formats
+      let description = `Code snippet for: ${userRequest}`;
+      const descriptionPatterns = [
+        /DESCRIPTION:\s*(.+?)(?:\n|$)/i,
+        /^(.+?)(?:\n```|\nCODE:|$)/s,
+        /This snippet (.+?)\./i
+      ];
+
+      for (const pattern of descriptionPatterns) {
+        const match = aiResponse.match(pattern);
+        if (match && match[1].trim().length > 10) {
+          description = match[1].trim();
+          break;
+        }
+      }
+
+      // Extract code from markdown code blocks
+      const codeBlockRegex = /```(?:\w+)?\n?([\s\S]*?)```/g;
+      const matches = [...aiResponse.matchAll(codeBlockRegex)];
+
+      if (matches.length > 0) {
+        let snippet = matches[0][1].trim();
+
+        // Clean up the snippet
+        if (snippet) {
+          // Remove any leading/trailing whitespace and ensure it's valid code
+          snippet = snippet.replace(/^\s*[\r\n]+|[\r\n]+\s*$/g, '');
+
+          // Create a placeholder for replacement
+          const placeholder = this.generateSnippetPlaceholder(userRequest);
+
+          return {
+            description,
+            originalSnippet: placeholder,
+            suggestedSnippet: snippet,
+            applyCommand: `replace:${placeholder}:${snippet}`
+          };
+        }
+      }
+
+      // If no code blocks found, try to extract code after "CODE:" or similar markers
+      const codePatterns = [
+        /CODE:\s*```(?:\w+)?\n?([\s\S]*?)```/i,
+        /```\w*\n([\s\S]*?)```/i,
+        /(?:function|class|const|let|var)\s+[\s\S]+?(?:;|$)(?:\n|$)/i
+      ];
+
+      for (const pattern of codePatterns) {
+        const match = aiResponse.match(pattern);
+        if (match && match[1] && match[1].trim().length > 10) {
+          const snippet = match[1].trim();
+          const placeholder = this.generateSnippetPlaceholder(userRequest);
+
+          return {
+            description,
+            originalSnippet: placeholder,
+            suggestedSnippet: snippet,
+            applyCommand: `replace:${placeholder}:${snippet}`
+          };
+        }
+      }
+
+      // If still no code found, the entire response might be code
+      if (aiResponse.includes('function') || aiResponse.includes('const') || aiResponse.includes('class')) {
+        const placeholder = this.generateSnippetPlaceholder(userRequest);
+        return {
+          description,
+          originalSnippet: placeholder,
+          suggestedSnippet: aiResponse.trim(),
+          applyCommand: `replace:${placeholder}:${aiResponse.trim()}`
+        };
+      }
+
+    } catch (error) {
+      console.warn('Failed to parse AI snippet response:', error);
+    }
+
+    return null;
+  }
+
+  private generateSnippetPlaceholder(userRequest: string): string {
+    const request = userRequest.toLowerCase();
+
+    if (request.includes('error') || request.includes('try') || request.includes('catch')) {
+      return '// Add error handling here';
+    }
+    if (request.includes('async') || request.includes('await') || request.includes('promise')) {
+      return '// Add async function here';
+    }
+    if (request.includes('react') || request.includes('component') || request.includes('jsx')) {
+      return '// Add React component here';
+    }
+    if (request.includes('function') || request.includes('utility')) {
+      return '// Add utility function here';
+    }
+
+    return '// Add code snippet here';
+  }
+
+  // Fallback hardcoded snippets if AI fails
+  private generateFallbackSnippet(userRequest: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } | null {
+    const request = userRequest.toLowerCase();
+
+    // Error handling snippets
+    if (request.includes('error') || request.includes('try') || request.includes('catch') || request.includes('exception')) {
+      const snippet = `try {
+  // Your code here
+  const result = performOperation();
+  console.log('Operation completed successfully');
+  return result;
+} catch (error) {
+  console.error('An error occurred:', error);
+  // Handle the error appropriately
+  throw error;
+}`;
+      return {
+        description: 'Error handling boilerplate with try-catch',
+        originalSnippet: '// Add error handling here',
+        suggestedSnippet: snippet,
+        applyCommand: `replace:// Add error handling here:${snippet}`,
+        type: 'snippet'
+      };
+    }
+
+    // Async/Promise snippets
+    if (request.includes('async') || request.includes('await') || request.includes('promise')) {
+      const snippet = `async function performAsyncOperation() {
+  try {
+    const result = await someAsyncFunction();
+    console.log('Result:', result);
+    return result;
+  } catch (error) {
+    console.error('Async operation failed:', error);
+    throw error;
+  }
+}
+
+// Usage:
+performAsyncOperation()
+  .then(result => console.log('Success:', result))
+  .catch(error => console.error('Failed:', error));`;
+      return {
+        description: 'Async/await function with promise handling',
+        originalSnippet: '// Add async function here',
+        suggestedSnippet: snippet,
+        applyCommand: `replace:// Add async function here:${snippet}`,
+        type: 'snippet'
+      };
+    }
+
+    // React component snippets
+    if (request.includes('react') || request.includes('component') || request.includes('jsx') || request.includes('hook')) {
+      const snippet = `import React, { useState, useEffect } from 'react';
+
+interface ComponentProps {
+  title?: string;
+  onAction?: () => void;
+}
+
+const MyComponent: React.FC<ComponentProps> = ({
+  title = 'My Component',
+  onAction
+}) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleAction = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Perform your action here
+      const result = await performAction();
+      setData(result);
+      onAction?.();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="my-component">
+      <h2>{title}</h2>
+
+      {loading && <div>Loading...</div>}
+      {error && <div className="error">Error: {error}</div>}
+
+      <button onClick={handleAction} disabled={loading}>
+        {loading ? 'Processing...' : 'Perform Action'}
+      </button>
+
+      {data && (
+        <div className="result">
+          Result: {JSON.stringify(data, null, 2)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default MyComponent;`;
+      return {
+        description: 'React component boilerplate with hooks and async data fetching',
+        originalSnippet: '// Add React component here',
+        suggestedSnippet: snippet,
+        applyCommand: `replace:// Add React component here:${snippet}`,
+        type: 'snippet'
+      };
+    }
+
+    // Default snippet - a simple utility function
+    const snippet = `/**
+ * Reusable utility function
+ * @param {any} param - Input parameter
+ * @returns {any} Processed result
+ */
+function utilityFunction(param) {
+  // Validate input
+  if (!param) {
+    throw new Error('Parameter is required');
+  }
+
+  // Process the parameter
+  const result = param; // Add your logic here
+
+  // Return the result
+  return result;
+}
+
+// Example usage:
+// const result = utilityFunction('input');
+// console.log(result);
+
+export default utilityFunction;`;
+    return {
+      description: 'Reusable utility function with input validation and error handling',
+      originalSnippet: '// Add utility function here',
+      suggestedSnippet: snippet,
+      applyCommand: `replace:// Add utility function here:${snippet}`,
+      type: 'snippet'
     };
   }
 

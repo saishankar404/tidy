@@ -23,23 +23,87 @@ export class AnalysisOrchestrator {
     this.geminiService = geminiService;
     this.config = {
       enabledAnalyzers: [
+        'security', // Prioritize security first
         'codeQuality',
-        'security',
         'performance',
         'maintainability',
         'testing',
         'documentation'
       ],
-      timeout: 30000, // 30 seconds
-      maxConcurrency: 1, // Run only 1 analysis at a time to prevent rate limits
+      timeout: 45000, // Increased to 45s to allow Gemini API time for complex analysis
+      maxConcurrency: 1, // Reduced to 1 to prevent API rate limiting
       includeSuggestions: true,
+      retryAttempts: 2, // Add retry logic for failed requests
+      backoffMultiplier: 1.5, // Exponential backoff
       ...config
     };
   }
 
+  /**
+   * Execute an analyzer with retry logic and exponential backoff
+   */
+  private async executeWithRetry(
+    analyzer: { name: string; fn: Function },
+    context: CodeContext,
+    abortSignal?: AbortSignal
+  ): Promise<AnalysisResult> {
+    const maxRetries = this.config.retryAttempts || 2;
+    let lastError: Error;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Check if analysis was cancelled
+        if (abortSignal?.aborted) {
+          throw new Error('Analysis cancelled');
+        }
+
+        // Add exponential backoff delay for retries
+        if (attempt > 0) {
+          const delay = Math.min(1000 * Math.pow(this.config.backoffMultiplier || 1.5, attempt - 1), 10000);
+          console.log(`🔄 Retrying ${analyzer.name} analysis (attempt ${attempt + 1}/${maxRetries + 1}) after ${delay}ms delay`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+
+        const result = await Promise.race([
+          analyzer.fn(context, this.geminiService),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Analysis timeout')), this.config.timeout)
+          ),
+          new Promise<never>((_, reject) => {
+            if (abortSignal) {
+              abortSignal.addEventListener('abort', () => reject(new Error('Analysis cancelled')));
+            }
+          })
+        ]);
+
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+        const errorMsg = lastError.message;
+
+        // Don't retry for certain errors
+        if (errorMsg.includes('Analysis cancelled') ||
+            errorMsg.includes('QUOTA_EXCEEDED') ||
+            errorMsg.includes('INVALID_API_KEY')) {
+          throw lastError;
+        }
+
+        console.warn(`${analyzer.name} analysis attempt ${attempt + 1} failed:`, errorMsg);
+
+        // If this was the last attempt, throw the error
+        if (attempt === maxRetries) {
+          throw lastError;
+        }
+      }
+    }
+
+    throw lastError!;
+  }
+
   async analyzeCode(
     context: CodeContext,
-    onProgress?: (progress: AnalysisProgress) => void
+    onProgress?: (progress: AnalysisProgress) => void,
+    abortSignal?: AbortSignal
   ): Promise<{
     results: AnalysisResult[];
     errors: AnalysisError[];
@@ -47,6 +111,7 @@ export class AnalysisOrchestrator {
       overallScore: number;
       totalIssues: number;
       totalSuggestions: number;
+
       analysisTime: number;
     };
   }> {
@@ -81,11 +146,20 @@ export class AnalysisOrchestrator {
     });
 
     for (let i = 0; i < batches.length; i++) {
+      // Check if analysis was cancelled
+      if (abortSignal?.aborted) {
+        throw new Error('Analysis cancelled');
+      }
+
       const batch = batches[i];
       console.log(`🔄 Processing batch ${i + 1}/${batches.length} with ${batch.length} analyzers: ${batch.map(a => a.name).join(', ')}`);
 
       const batchPromises = batch.map(async (analyzer) => {
         try {
+          // Check if analysis was cancelled before starting this analyzer
+          if (abortSignal?.aborted) {
+            throw new Error('Analysis cancelled');
+          }
           onProgress?.({
             current: results.length + 1,
             total: enabledAnalyzers.length,
@@ -110,12 +184,7 @@ export class AnalysisOrchestrator {
               }
             };
           } else {
-            result = await Promise.race([
-              analyzer.fn(context, this.geminiService),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('Analysis timeout')), this.config.timeout)
-              )
-            ]);
+            result = await this.executeWithRetry(analyzer, context, abortSignal);
           }
 
           results.push(result);
