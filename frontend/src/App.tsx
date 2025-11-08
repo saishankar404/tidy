@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SettingsProvider } from "@/lib/SettingsContext";
+import LandingPage from "./pages/landing/LandingPage";
 import Index from "./pages/Index";
 import AnalysisHistory from "./pages/AnalysisHistory";
 import SnippetLibrary from "./pages/SnippetLibrary";
@@ -19,7 +20,8 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/code" element={<Index />} />
             <Route path="/history" element={<AnalysisHistory />} />
             <Route path="/snippets" element={<SnippetLibrary />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

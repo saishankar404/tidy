@@ -22,27 +22,46 @@ const AnalysisHistory = () => {
   }, []);
 
   useEffect(() => {
-    if (searchQuery.trim()) {
-      setFilteredSessions(analysisHistory.searchSessions(searchQuery));
-    } else {
+    try {
+      if (searchQuery.trim()) {
+        setFilteredSessions(analysisHistory.getInstance().searchSessions(searchQuery));
+      } else {
+        setFilteredSessions(sessions);
+      }
+    } catch (error) {
+      console.error('Failed to search sessions:', error);
       setFilteredSessions(sessions);
     }
   }, [searchQuery, sessions]);
 
   const loadSessions = () => {
-    const allSessions = analysisHistory.getAllSessions();
-    setSessions(allSessions);
-    setFilteredSessions(allSessions);
+    try {
+      const allSessions = analysisHistory.getInstance().getAllSessions();
+      setSessions(allSessions);
+      setFilteredSessions(allSessions);
+    } catch (error) {
+      console.error('Failed to load analysis sessions:', error);
+      setSessions([]);
+      setFilteredSessions([]);
+    }
   };
 
   const handleDeleteSession = (sessionId: string) => {
-    analysisHistory.deleteSession(sessionId);
-    loadSessions();
+    try {
+      analysisHistory.getInstance().deleteSession(sessionId);
+      loadSessions();
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+    }
   };
 
   const handleClearAllHistory = () => {
-    analysisHistory.clearAllHistory();
-    loadSessions();
+    try {
+      analysisHistory.getInstance().clearAllHistory();
+      loadSessions();
+    } catch (error) {
+      console.error('Failed to clear history:', error);
+    }
   };
 
   const formatDate = (date: Date) => {
