@@ -5,39 +5,69 @@
   justify-content: center;
   position: sticky;
   top: 0px;
-  .card{
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    top: -25%;
-    height: 800px;
-    width: 1400px;
-    border-radius: 25px;
-    padding: 50px;
-    transform-origin: top;
-    font-family: 'Satoshi', sans-serif;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: left;
+    .card{
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      top: -25%;
+      height: 900px;
+      width: 1600px;
+      border-radius: 25px;
+      padding: 80px;
+      transform-origin: top;
+      font-family: 'Satoshi', sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: left;
+
     h2{
-      margin: 0 0 40px 0;
-      font-size: 64px;
+      margin: 0 0 50px 0;
+      font-size: 120px;
       font-weight: bold;
-      text-align: center;
+      text-align: left;
       &.whiteText{
         color: white;
       }
     }
     p{
-      font-size: 32px;
-      max-width: 800px;
-      line-height: 1.4;
-      text-align: center;
+      font-size: 48px;
+      max-width: 900px;
+      line-height: 1.3;
+      text-align: left;
       &.whiteText{
         color: white;
       }
     }
+  }
+
+  // Pattern variations for different cards
+  &.patternDots {
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(255,255,255,0.25) 1px, transparent 0);
+    background-size: 20px 20px;
+  }
+
+  &.patternGrid {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.15) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.15) 1px, transparent 1px);
+    background-size: 25px 25px;
+  }
+
+  &.patternDiagonal {
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,0.15) 1px, transparent 1px);
+    background-size: 15px 15px;
+  }
+
+  &.patternCross {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.15) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.15) 1px, transparent 1px),
+      linear-gradient(45deg, rgba(255,255,255,0.15) 1px, transparent 1px),
+      linear-gradient(-45deg, rgba(255,255,255,0.15) 1px, transparent 1px);
+    background-size: 20px 20px;
   }
 }

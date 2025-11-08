@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Bot, Check, X as XIcon, Zap, ChevronDown, ChevronUp, ChevronLeft, Sparkles, GitBranch, Send, History, Copy, BookOpen, Settings, Play, Clock, Shield, BarChart3, Wrench, FileText, TestTube } from "lucide-react";
+import { X, Bot, Check, X as XIcon, Zap, ChevronDown, ChevronUp, ChevronLeft, Sparkles, Send, History, Copy, BookOpen, Settings, Play, Clock, Shield, BarChart3, Wrench, FileText, TestTube } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useAIReview, type SuggestionItem } from "@/lib/useAIReview";
 import { ChatAssistant, type ChatMessage } from "@/lib/chatAssistant";
@@ -104,7 +104,6 @@ interface CodeReviewerSidebarProps {
   onOpenDiff: (filePath: string, diffContent: string) => void;
   onApplyChanges: (filePath: string, newContent: string) => void;
   onAnalyze?: () => void;
-  onConnectGitHub?: () => void;
 }
 
 
@@ -126,7 +125,7 @@ const ANALYSIS_PRESETS = {
   full: ['codeQuality', 'security', 'performance', 'maintainability', 'testing', 'documentation']
 };
 
-export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onOpenDiff, onApplyChanges, onAnalyze, onConnectGitHub }: CodeReviewerSidebarProps) {
+export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onOpenDiff, onApplyChanges, onAnalyze }: CodeReviewerSidebarProps) {
     const navigate = useNavigate();
     const [shouldAnalyze, setShouldAnalyze] = useState(false);
     const [selectedAnalyses, setSelectedAnalyses] = useState<string[]>(ANALYSIS_PRESETS.quick);
@@ -1035,32 +1034,32 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
                    </DropdownMenuContent>
                  </DropdownMenu>
 
-                <Button
-                  onClick={() => setChatMode(true)}
-                  className="w-full h-12 border-2 border-dashed border-muted-foreground/30 rounded-xl bg-background hover:bg-muted/50 transition-all duration-300 hover:border-muted-foreground/50 hover:shadow-sm"
-                  variant="outline"
-                >
-                  <Bot className="h-5 w-5 mr-3" />
-                  <span className="font-medium">Chat with Tidy</span>
-                </Button>
+                 <Button
+                   onClick={() => setChatMode(true)}
+                   className="w-full h-12 border-2 border-dashed border-muted-foreground/30 rounded-xl bg-background hover:bg-muted/50 transition-all duration-300 hover:border-muted-foreground/50 hover:shadow-sm"
+                   variant="outline"
+                 >
+                   <Bot className="h-5 w-5 mr-3" />
+                   <span className="font-medium">Chat with Tidy</span>
+                 </Button>
 
-                <Button
-                  onClick={onConnectGitHub}
-                  className="w-full h-12 border-2 border-dashed border-muted-foreground/30 rounded-xl bg-background hover:bg-muted/50 transition-all duration-300 hover:border-muted-foreground/50 hover:shadow-sm"
-                  variant="outline"
-                >
-                  <GitBranch className="h-5 w-5 mr-3" />
-                  <span className="font-medium">Manage Github</span>
-                </Button>
+                 <Button
+                   onClick={() => navigate('/snippets')}
+                   className="w-full h-12 border-2 border-dashed border-muted-foreground/30 rounded-xl bg-background hover:bg-muted/50 transition-all duration-300 hover:border-muted-foreground/50 hover:shadow-sm"
+                   variant="outline"
+                 >
+                   <BookOpen className="h-5 w-5 mr-3" />
+                   <span className="font-medium">Saved Snippets</span>
+                 </Button>
 
-                <Button
-                  onClick={() => navigate('/history')}
-                  className="w-full h-12 border-2 border-dashed border-muted-foreground/30 rounded-xl bg-background hover:bg-muted/50 transition-all duration-300 hover:border-muted-foreground/50 hover:shadow-sm"
-                  variant="outline"
-                >
-                  <History className="h-5 w-5 mr-3" />
-                  <span className="font-medium">View History</span>
-                </Button>
+                 <Button
+                   onClick={() => navigate('/history')}
+                   className="w-full h-12 border-2 border-dashed border-muted-foreground/30 rounded-xl bg-background hover:bg-muted/50 transition-all duration-300 hover:border-muted-foreground/50 hover:shadow-sm"
+                   variant="outline"
+                 >
+                   <History className="h-5 w-5 mr-3" />
+                   <span className="font-medium">View History</span>
+                 </Button>
               </div>
             </div>
           </div>

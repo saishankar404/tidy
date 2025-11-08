@@ -40,7 +40,7 @@ export function DocsSidebar() {
   return (
     <aside className="fixed top-0 left-0 z-30 h-screen w-64 border-r border-doc-sidebar-border bg-doc-sidebar-bg">
       <div className="flex h-16 items-center border-b border-doc-sidebar-border px-6">
-        <h2 className="text-lg font-semibold">TIDY Editor</h2>
+        <img src="/logo.png" alt="Tidy Logo" className="h-8 w-auto" />
       </div>
 
       <ScrollArea className="h-[calc(100vh-4rem)] py-6 px-4">

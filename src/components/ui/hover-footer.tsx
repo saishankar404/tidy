@@ -35,7 +35,7 @@ export const TextHoverEffect = ({
       ref={svgRef}
       width="100%"
       height="100%"
-      viewBox="0 0 300 100"
+      viewBox="0 0 400 150"
       xmlns="http://www.w3.org/2000/svg"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -88,7 +88,7 @@ export const TextHoverEffect = ({
         textAnchor="middle"
         dominantBaseline="middle"
         strokeWidth="0.3"
-        className="fill-transparent stroke-neutral-200 font-[helvetica] text-7xl font-bold dark:stroke-neutral-800"
+         className="fill-transparent stroke-neutral-200 font-[helvetica] text-9xl font-bold dark:stroke-neutral-800"
         style={{ opacity: hovered ? 0.7 : 0 }}
       >
         {text}
@@ -99,8 +99,8 @@ export const TextHoverEffect = ({
         textAnchor="middle"
         dominantBaseline="middle"
         strokeWidth="0.3"
-        className="fill-transparent stroke-[#ea580c] font-[helvetica] text-7xl font-bold
-        dark:stroke-[#ea580c99]"
+         className="fill-transparent stroke-[#ea580c] font-[helvetica] text-9xl font-bold
+         dark:stroke-[#ea580c99]"
         initial={{ strokeDashoffset: 1000, strokeDasharray: 1000 }}
         animate={{
           strokeDashoffset: 0,
@@ -109,6 +109,7 @@ export const TextHoverEffect = ({
         transition={{
           duration: 4,
           ease: "easeInOut",
+          repeat: Infinity,
         }}
       >
         {text}
@@ -121,7 +122,7 @@ export const TextHoverEffect = ({
         stroke="url(#textGradient)"
         strokeWidth="0.3"
         mask="url(#textMask)"
-        className="fill-transparent font-[helvetica] text-7xl font-bold"
+         className="fill-transparent font-[helvetica] text-9xl font-bold"
       >
         {text}
       </text>
@@ -147,8 +148,9 @@ function HoverFooter() {
     <footer className="relative h-fit py-12 mt-16">
       <div className="max-w-7xl mx-auto z-40 relative">
         {/* Text hover effect */}
-        <div className="flex h-[18rem] justify-center">
+        <div className="flex flex-col h-[24rem] justify-center items-center">
           <TextHoverEffect text="TIDY" className="z-50" />
+          <span className="mt-4 text-muted-foreground">&copy; 2025 Tidy</span>
         </div>
       </div>
     </footer>

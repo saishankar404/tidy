@@ -53,7 +53,7 @@ const FeaturesOverview = () => {
       </div>
 
       <div
-        className={`w-[1080px] h-[600px] bg-muted rounded-[32px] shadow-2xl transition-all duration-800 delay-400 ${
+        className={`w-[1580px] h-[800px] bg-muted rounded-[32px] shadow-2xl transition-all duration-800 delay-400 ${
           isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"
         }`}
       />

@@ -13,7 +13,7 @@ const Navigation = () => {
           </a>
         </div>
         
-        <div className="w-12 h-8 bg-background/10 rounded" />
+        <img src="/logo.png" alt="Tidy Logo" className="w-12 h-8 object-contain" />
         
         <div className="flex items-center gap-6">
           <a href="/docs" className="text-background font-bold text-sm tracking-wide hover:text-neon transition-colors">

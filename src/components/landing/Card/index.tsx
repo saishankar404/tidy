@@ -17,11 +17,22 @@ const Card = ({i, title, description, color, progress, range, targetScale}: Card
   const container = useRef(null);
   const scale = useTransform(progress, range, [1, targetScale]);
 
+  // Different patterns for each card
+  const getPatternClass = (index: number) => {
+    const patterns = [
+      styles.patternDots,
+      styles.patternGrid,
+      styles.patternDiagonal,
+      styles.patternCross
+    ];
+    return patterns[index % patterns.length];
+  };
+
   return (
     <div ref={container} className={styles.cardContainer}>
       <motion.div
         style={{backgroundColor: color, scale, top:`calc(-5vh + ${i * 25}px)`}}
-        className={styles.card}
+        className={`${styles.card} ${getPatternClass(i)}`}
       >
         <h2 className={title === "Lightning Fast" ? styles.whiteText : ""}>{title}</h2>
         <p className={title === "Lightning Fast" ? styles.whiteText : ""}>{description}</p>
