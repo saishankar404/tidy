@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { analysisHistory, AnalysisSession } from "@/lib/analysisHistory";
-import { AIReviewResponse } from "@/lib/useAIReview";
 
 const AnalysisHistory = () => {
   const navigate = useNavigate();
@@ -23,27 +22,46 @@ const AnalysisHistory = () => {
   }, []);
 
   useEffect(() => {
-    if (searchQuery.trim()) {
-      setFilteredSessions(analysisHistory.searchSessions(searchQuery));
-    } else {
+    try {
+      if (searchQuery.trim()) {
+        setFilteredSessions(analysisHistory.getInstance().searchSessions(searchQuery));
+      } else {
+        setFilteredSessions(sessions);
+      }
+    } catch (error) {
+      console.error('Failed to search sessions:', error);
       setFilteredSessions(sessions);
     }
   }, [searchQuery, sessions]);
 
   const loadSessions = () => {
-    const allSessions = analysisHistory.getAllSessions();
-    setSessions(allSessions);
-    setFilteredSessions(allSessions);
+    try {
+      const allSessions = analysisHistory.getInstance().getAllSessions();
+      setSessions(allSessions);
+      setFilteredSessions(allSessions);
+    } catch (error) {
+      console.error('Failed to load analysis sessions:', error);
+      setSessions([]);
+      setFilteredSessions([]);
+    }
   };
 
   const handleDeleteSession = (sessionId: string) => {
-    analysisHistory.deleteSession(sessionId);
-    loadSessions();
+    try {
+      analysisHistory.getInstance().deleteSession(sessionId);
+      loadSessions();
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+    }
   };
 
   const handleClearAllHistory = () => {
-    analysisHistory.clearAllHistory();
-    loadSessions();
+    try {
+      analysisHistory.getInstance().clearAllHistory();
+      loadSessions();
+    } catch (error) {
+      console.error('Failed to clear history:', error);
+    }
   };
 
   const formatDate = (date: Date) => {
@@ -76,7 +94,7 @@ const AnalysisHistory = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/code')}
             className="h-8 w-8"
           >
             <ArrowLeft className="h-4 w-4" />

@@ -98,7 +98,7 @@ const SnippetLibrary: React.FC = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/code')}
             className="h-8 w-8"
             title="Back to Editor"
           >

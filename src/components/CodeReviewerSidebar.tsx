@@ -251,18 +251,38 @@ export function CodeReviewerSidebar({ currentFile, currentFileData, onClose, onO
       setIsResolving(true);
 
       try {
-        // Simple fallback for demo - just show the existing diff
+        // Use the suggestion's fixedCode if available, otherwise generate from diff
+        let fixedCode = suggestion.fixedCode;
+        if (!fixedCode && suggestion.diff) {
+          // Parse diff to generate fixed code
+          const lines = suggestion.diff.split('\n');
+          const resultLines: string[] = [];
+
+          for (const line of lines) {
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+              // Add line
+              resultLines.push(line.substring(1));
+            } else if (!line.startsWith('-') && !line.startsWith('+++')) {
+              // Context or unchanged line
+              resultLines.push(line.startsWith(' ') ? line.substring(1) : line);
+            }
+            // Skip removal lines for now (simplified approach)
+          }
+
+          fixedCode = resultLines.join('\n');
+        }
+
         setSelectedSuggestion({
           ...suggestion,
           diff: suggestion.diff || `// Suggested fix for: ${suggestion.title}\n// ${suggestion.description}\n\n${currentFileData}`,
-          fixedCode: currentFileData
+          fixedCode: fixedCode || currentFileData
         });
       } catch (error) {
         console.error('Failed to resolve suggestion:', error);
         setSelectedSuggestion({
           ...suggestion,
           diff: suggestion.diff || `// Could not generate fix for: ${suggestion.title}\n// ${suggestion.description}\n\n${currentFileData}`,
-          fixedCode: currentFileData
+          fixedCode: suggestion.fixedCode || currentFileData
         });
       } finally {
         setIsResolving(false);

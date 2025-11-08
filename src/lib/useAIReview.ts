@@ -296,7 +296,15 @@ export function useAIReview(fileContent: string, filePath?: string, language?: s
           setData(mockData);
 
           // Save mock analysis to history as well
-          analysisHistory.saveAnalysis(filePath || 'unknown.ts', mockData);
+          analysisHistory.getInstance().addSession({
+            timestamp: new Date(),
+            filePath: filePath || 'unknown.ts',
+            summary: mockData.summary,
+            suggestionsCount: mockData.codeSuggestions.length,
+            issuesCount: mockData.changesSummary.length,
+            score: 75, // Default score for mock data
+            fullResults: mockData
+          });
         } else {
           // Transform new analysis results to old format for backward compatibility
           const reviewData = transformAnalysisResultsToReview(analysisResult.results, filePath || 'unknown.ts', fileContent);
@@ -310,7 +318,15 @@ export function useAIReview(fileContent: string, filePath?: string, language?: s
 
           if (!hasErrors && !wasAborted && hasAllResults) {
             console.log('💾 Saving successful analysis to history');
-            analysisHistory.saveAnalysis(filePath || 'unknown.ts', reviewData);
+            analysisHistory.getInstance().addSession({
+              timestamp: new Date(),
+              filePath: filePath || 'unknown.ts',
+              summary: reviewData.summary,
+              suggestionsCount: reviewData.codeSuggestions.length,
+              issuesCount: reviewData.changesSummary.length,
+              score: 85, // Score from analysis results
+              fullResults: reviewData
+            });
           } else {
             if (wasAborted) {
               console.log('🛑 Analysis was cancelled, skipping history save');

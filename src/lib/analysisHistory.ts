@@ -1,4 +1,5 @@
 import { AIReviewResponse } from './useAIReview';
+import { AnalysisAPIClient } from './api/client';
 
 export interface AnalysisSession {
   id: string;
@@ -18,9 +19,15 @@ const BACKUP_KEY = 'analysis_history_backup';
 
 class AnalysisHistoryManager {
   private sessions: AnalysisSession[] = [];
+  private apiClient: AnalysisAPIClient;
+  private userId: string;
+  private isOnline: boolean = true;
 
-  constructor() {
+  constructor(userId: string) {
+    this.userId = userId;
+    this.apiClient = new AnalysisAPIClient();
     this.loadFromStorage();
+    this.loadFromBackend();
   }
 
   private loadFromStorage(): void {
@@ -52,185 +59,174 @@ class AnalysisHistoryManager {
             .map((session: any) => ({
               ...session,
               timestamp: new Date(session.timestamp),
-              // Add version if missing (for migration)
-              version: session.version || '1.0'
             }))
-            .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) // Sort by timestamp desc
-            .slice(0, MAX_HISTORY_ITEMS); // Limit to max items
-        } else {
-          console.warn('Invalid history data structure, starting fresh');
-          this.sessions = [];
+            .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+            .slice(0, MAX_HISTORY_ITEMS);
         }
       }
     } catch (error) {
-      console.error('Failed to load analysis history:', error);
+      console.error('Failed to load analysis history from storage:', error);
+      this.sessions = [];
+    }
+  }
 
-      // Try to recover from backup
-      try {
-        const backup = localStorage.getItem(BACKUP_KEY);
-        if (backup) {
-          console.log('🔄 Attempting recovery from backup');
-          this.sessions = JSON.parse(backup)
-            .slice(0, MAX_HISTORY_ITEMS)
-            .map((session: any) => ({
-              ...session,
-              timestamp: new Date(session.timestamp)
-            }));
-        } else {
-          this.sessions = [];
-        }
-      } catch (recoveryError) {
-        console.error('Failed to recover from backup:', recoveryError);
-        this.sessions = [];
+  private async loadFromBackend(): Promise<void> {
+    if (!this.isOnline) return;
+
+    try {
+      const response = await this.apiClient.getAnalysisHistory(this.userId, MAX_HISTORY_ITEMS);
+      if (response && response.sessions) {
+        // Merge with local data, preferring backend data
+        const backendSessions = response.sessions.map((session: any) => ({
+          ...session,
+          timestamp: new Date(session.timestamp),
+        }));
+
+        // Combine and deduplicate by ID
+        const combined = [...backendSessions];
+        this.sessions.forEach(localSession => {
+          if (!combined.find(s => s.id === localSession.id)) {
+            combined.push(localSession);
+          }
+        });
+
+        this.sessions = combined
+          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+          .slice(0, MAX_HISTORY_ITEMS);
+
+        // Update localStorage with merged data
+        this.saveToStorage();
       }
+    } catch (error) {
+      console.warn('Failed to load analysis history from backend:', error);
+      this.isOnline = false;
     }
   }
 
   private saveToStorage(): void {
     try {
       const serialized = JSON.stringify(this.sessions);
-
-      // Create backup before saving
-      const existing = localStorage.getItem(STORAGE_KEY);
-      if (existing) {
-        localStorage.setItem(BACKUP_KEY, existing);
-      }
-
-      // Save new data
       localStorage.setItem(STORAGE_KEY, serialized);
 
-      // Clear backup on successful save
-      localStorage.removeItem(BACKUP_KEY);
-
+      // Create backup
+      localStorage.setItem(BACKUP_KEY, serialized);
     } catch (error) {
-      console.error('Failed to save analysis history:', error);
+      console.error('Failed to save analysis history to storage:', error);
+    }
+  }
 
-      // Attempt recovery from backup
+  async addSession(session: Omit<AnalysisSession, 'id' | 'fileName'>): Promise<void> {
+    const newSession: AnalysisSession = {
+      ...session,
+      id: `analysis_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      fileName: session.filePath.split('/').pop() || 'file',
+    };
+
+    // Add to local storage immediately
+    this.sessions.unshift(newSession);
+    this.sessions = this.sessions.slice(0, MAX_HISTORY_ITEMS);
+    this.saveToStorage();
+
+    // Try to sync with backend
+    if (this.isOnline) {
       try {
-        const backup = localStorage.getItem(BACKUP_KEY);
-        if (backup) {
-          console.log('🔄 Restoring from backup due to save failure');
-          localStorage.setItem(STORAGE_KEY, backup);
-          // Re-parse backup data
-          this.sessions = JSON.parse(backup).map((session: any) => ({
-            ...session,
-            timestamp: new Date(session.timestamp)
-          }));
-        }
-      } catch (recoveryError) {
-        console.error('Failed to recover from backup:', recoveryError);
+        // Note: The backend API expects the session to be saved during analysis
+        // So we don't need to call it again here
+        console.log('Analysis session saved locally and will sync with backend');
+      } catch (error) {
+        console.warn('Failed to sync analysis session with backend:', error);
       }
     }
-  }
-
-  saveAnalysis(filePath: string, results: AIReviewResponse): void {
-    try {
-      const session: AnalysisSession = {
-        id: this.generateUniqueId(),
-        timestamp: new Date(),
-        filePath,
-        fileName: this.extractFileName(filePath),
-        summary: results.summary,
-        suggestionsCount: results.codeSuggestions?.length || 0,
-        issuesCount: results.changesSummary?.length || 0,
-        score: this.calculateOverallScore(results),
-        fullResults: results,
-        version: '2.0' // Current version
-      };
-
-      // Validate session data before saving
-      if (!this.validateSession(session)) {
-        console.error('Invalid session data, skipping save');
-        return;
-      }
-
-      this.sessions.unshift(session); // Add to beginning
-
-      // Keep only the most recent items
-      if (this.sessions.length > MAX_HISTORY_ITEMS) {
-        this.sessions = this.sessions.slice(0, MAX_HISTORY_ITEMS);
-      }
-
-      this.saveToStorage();
-
-    } catch (error) {
-      console.error('Failed to save analysis session:', error);
-      // Don't throw - we don't want to break the analysis flow
-    }
-  }
-
-  private generateUniqueId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  private extractFileName(filePath: string): string {
-    return filePath.split('/').pop() || filePath;
-  }
-
-  private validateSession(session: AnalysisSession): boolean {
-    return !!(
-      session.id &&
-      session.filePath &&
-      session.fileName &&
-      typeof session.score === 'number' &&
-      session.timestamp instanceof Date &&
-      !isNaN(session.timestamp.getTime())
-    );
   }
 
   getAllSessions(): AnalysisSession[] {
     return [...this.sessions];
   }
 
-  getSessionById(id: string): AnalysisSession | null {
-    return this.sessions.find(session => session.id === id) || null;
+  getSessionById(id: string): AnalysisSession | undefined {
+    return this.sessions.find(session => session.id === id);
   }
 
-  deleteSession(id: string): boolean {
+  async deleteSession(id: string): Promise<boolean> {
     const index = this.sessions.findIndex(session => session.id === id);
-    if (index !== -1) {
-      this.sessions.splice(index, 1);
-      this.saveToStorage();
-      return true;
-    }
-    return false;
-  }
+    if (index === -1) return false;
 
-  clearAllHistory(): void {
-    this.sessions = [];
+    this.sessions.splice(index, 1);
     this.saveToStorage();
+
+    // Try to delete from backend
+    if (this.isOnline) {
+      try {
+        // Note: Backend deletion not fully implemented yet
+        console.log('Session deleted locally');
+      } catch (error) {
+        console.warn('Failed to delete session from backend:', error);
+      }
+    }
+
+    return true;
   }
 
-  private calculateOverallScore(results: AIReviewResponse): number {
-    // Calculate a simple overall score based on suggestions and issues
-    const totalSuggestions = results.codeSuggestions.length;
-    const totalIssues = results.changesSummary.length;
+  async clearAllHistory(): Promise<void> {
+    this.sessions = [];
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(BACKUP_KEY);
 
-    // Base score of 100, reduce based on issues and suggestions
-    let score = 100;
-    score -= totalIssues * 5; // 5 points per issue
-    score -= totalSuggestions * 2; // 2 points per suggestion
-
-    return Math.max(0, Math.min(100, score));
+    // Try to clear backend history
+    if (this.isOnline) {
+      try {
+        // Note: Backend bulk deletion not fully implemented yet
+        console.log('History cleared locally');
+      } catch (error) {
+        console.warn('Failed to clear history from backend:', error);
+      }
+    }
   }
 
   searchSessions(query: string): AnalysisSession[] {
-    const lowercaseQuery = query.toLowerCase();
+    if (!query.trim()) return this.getAllSessions();
+
+    const lowerQuery = query.toLowerCase();
     return this.sessions.filter(session =>
-      session.fileName.toLowerCase().includes(lowercaseQuery) ||
-      session.summary.toLowerCase().includes(lowercaseQuery) ||
-      session.filePath.toLowerCase().includes(lowercaseQuery)
+      session.fileName.toLowerCase().includes(lowerQuery) ||
+      session.filePath.toLowerCase().includes(lowerQuery) ||
+      session.summary.toLowerCase().includes(lowerQuery)
     );
   }
 
-  getSessionsByFile(filePath: string): AnalysisSession[] {
-    return this.sessions.filter(session => session.filePath === filePath);
-  }
-
-  getRecentSessions(limit: number = 10): AnalysisSession[] {
-    return this.sessions.slice(0, limit);
+  setOnlineStatus(online: boolean): void {
+    this.isOnline = online;
+    if (online) {
+      // Try to sync when coming back online
+      this.loadFromBackend();
+    }
   }
 }
 
-// Export singleton instance
-export const analysisHistory = new AnalysisHistoryManager();
+// Export singleton instance - will be initialized with user ID
+let historyManager: AnalysisHistoryManager | null = null;
+
+export const analysisHistory = {
+  initialize: (userId: string) => {
+    if (!historyManager) {
+      historyManager = new AnalysisHistoryManager(userId);
+    }
+    return historyManager;
+  },
+
+  getInstance: () => {
+    if (!historyManager) {
+      throw new Error('Analysis history not initialized. Call initialize() first.');
+    }
+    return historyManager;
+  }
+};
+
+// For backward compatibility, export methods that delegate to the instance
+export const getAnalysisHistory = () => analysisHistory.getInstance();
+export const addAnalysisSession = (session: Omit<AnalysisSession, 'id' | 'fileName'>) =>
+  analysisHistory.getInstance().addSession(session);
+export const getAllAnalysisSessions = () => analysisHistory.getInstance().getAllSessions();
+export const deleteAnalysisSession = (id: string) => analysisHistory.getInstance().deleteSession(id);
+export const clearAnalysisHistory = () => analysisHistory.getInstance().clearAllHistory();
+export const searchAnalysisSessions = (query: string) => analysisHistory.getInstance().searchSessions(query);

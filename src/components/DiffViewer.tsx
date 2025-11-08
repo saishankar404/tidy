@@ -4,6 +4,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, Download, Eye } from "lucide-react";
+// @ts-ignore
+import { diffLines } from "diff";
+
+interface DiffChange {
+  added?: boolean;
+  removed?: boolean;
+  value: string;
+}
 
 interface DiffViewerProps {
   isOpen: boolean;
@@ -26,29 +34,42 @@ export function DiffViewer({
 }: DiffViewerProps) {
   const [viewMode, setViewMode] = useState<'split' | 'unified'>('split');
 
-  // Simple diff calculation (in a real app, you'd use a proper diff library)
+  // Generate proper diff using diff library
   const generateDiff = () => {
-    const originalLines = originalContent.split('\n');
-    const newLines = newContent.split('\n');
+    const patches = diffLines(originalContent, newContent);
     const diff: Array<{ type: 'add' | 'remove' | 'context', content: string, lineNumber?: number }> = [];
 
-    const maxLines = Math.max(originalLines.length, newLines.length);
+    let lineNumber = 1;
 
-    for (let i = 0; i < maxLines; i++) {
-      const originalLine = originalLines[i];
-      const newLine = newLines[i];
-
-      if (originalLine !== newLine) {
-        if (originalLine !== undefined) {
-          diff.push({ type: 'remove', content: originalLine, lineNumber: i + 1 });
-        }
-        if (newLine !== undefined) {
-          diff.push({ type: 'add', content: newLine, lineNumber: i + 1 });
-        }
-      } else if (originalLine !== undefined) {
-        diff.push({ type: 'context', content: originalLine, lineNumber: i + 1 });
+    patches.forEach((patch: DiffChange) => {
+      if (patch.added) {
+        // Added lines
+        const lines = patch.value.split('\n');
+        lines.forEach((line: string, index: number) => {
+          if (line !== '' || index < lines.length - 1) { // Don't add empty line at end
+            diff.push({ type: 'add', content: line, lineNumber });
+          }
+        });
+      } else if (patch.removed) {
+        // Removed lines
+        const lines = patch.value.split('\n');
+        lines.forEach((line: string, index: number) => {
+          if (line !== '' || index < lines.length - 1) { // Don't add empty line at end
+            diff.push({ type: 'remove', content: line, lineNumber });
+            lineNumber++; // Increment line number for removed lines
+          }
+        });
+      } else {
+        // Context lines
+        const lines = patch.value.split('\n');
+        lines.forEach((line: string, index: number) => {
+          if (line !== '' || index < lines.length - 1) { // Don't add empty line at end
+            diff.push({ type: 'context', content: line, lineNumber });
+            lineNumber++;
+          }
+        });
       }
-    }
+    });
 
     return diff;
   };
@@ -69,11 +90,11 @@ export function DiffViewer({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[80vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span>Review Changes: {filePath}</span>
-            <div className="flex items-center gap-2">
+      <DialogContent className="max-w-6xl w-full max-h-[85vh] flex flex-col p-0 mx-4 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b">
+          <DialogTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-sm sm:text-base truncate max-w-[60%] sm:max-w-none">Review Changes: {filePath}</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Button
                 variant="outline"
                 size="sm"
@@ -90,26 +111,42 @@ export function DiffViewer({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0">
-          <ScrollArea className="h-full">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col px-6 py-4 w-full">
+          <ScrollArea className="flex-1 pr-4 w-full">
             {viewMode === 'split' ? (
-              <div className="grid grid-cols-2 gap-4 h-full">
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm text-muted-foreground">Original</h4>
-                  <pre className="text-xs font-mono bg-muted p-3 rounded border overflow-x-auto whitespace-pre-wrap">
-                    {originalContent}
-                  </pre>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full min-h-0">
+                <div className="space-y-2 min-w-0 flex flex-col">
+                  <h4 className="font-medium text-sm text-muted-foreground flex-shrink-0">Original</h4>
+                  <div className="flex-1 min-h-0 overflow-hidden border rounded">
+                    <ScrollArea className="h-full w-full">
+                      <div className="text-xs font-mono bg-muted p-3 whitespace-pre-wrap break-words overflow-wrap-anywhere min-w-0">
+                        {originalContent.split('\n').map((line, index) => (
+                          <div key={index} className="min-w-0 break-all">
+                            {line || '\u00A0'}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm text-muted-foreground">Modified</h4>
-                  <pre className="text-xs font-mono bg-muted p-3 rounded border overflow-x-auto whitespace-pre-wrap">
-                    {newContent}
-                  </pre>
+                <div className="space-y-2 min-w-0 flex flex-col">
+                  <h4 className="font-medium text-sm text-muted-foreground flex-shrink-0">Modified</h4>
+                  <div className="flex-1 min-h-0 overflow-hidden border rounded">
+                    <ScrollArea className="h-full w-full">
+                      <div className="text-xs font-mono bg-muted p-3 whitespace-pre-wrap break-words overflow-wrap-anywhere min-w-0">
+                        {newContent.split('\n').map((line, index) => (
+                          <div key={index} className="min-w-0 break-all">
+                            {line || '\u00A0'}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 mb-3">
+              <div className="space-y-3 flex flex-col min-h-0">
+                <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
                   <Badge variant="outline" className="text-green-600 border-green-200">
                     +{diff.filter(d => d.type === 'add').length} additions
                   </Badge>
@@ -117,49 +154,55 @@ export function DiffViewer({
                     -{diff.filter(d => d.type === 'remove').length} deletions
                   </Badge>
                 </div>
-                <div className="border rounded font-mono text-sm">
-                  {diff.map((line, index) => (
-                    <div
-                      key={index}
-                      className={`px-3 py-1 flex items-center ${
-                        line.type === 'add'
-                          ? 'bg-green-50 border-l-4 border-green-400'
-                          : line.type === 'remove'
-                          ? 'bg-red-50 border-l-4 border-red-400'
-                          : 'bg-gray-50'
-                      }`}
-                    >
-                      <span className="w-8 text-right text-xs text-muted-foreground mr-3">
-                        {line.lineNumber}
-                      </span>
-                      <span className={`flex-1 ${
-                        line.type === 'add'
-                          ? 'text-green-800'
-                          : line.type === 'remove'
-                          ? 'text-red-800'
-                          : 'text-gray-700'
-                      }`}>
-                        {line.type === 'add' && '+ '}
-                        {line.type === 'remove' && '- '}
-                        {line.content || ' '}
-                      </span>
+                <div className="flex-1 min-h-0 border rounded overflow-hidden">
+                  <ScrollArea className="h-full w-full">
+                    <div className="font-mono text-sm min-w-0">
+                      {diff.map((line, index) => (
+                        <div
+                          key={index}
+                          className={`px-3 py-1 flex items-start min-w-0 ${
+                            line.type === 'add'
+                              ? 'bg-green-50 border-l-4 border-green-400'
+                              : line.type === 'remove'
+                              ? 'bg-red-50 border-l-4 border-red-400'
+                              : 'bg-gray-50'
+                          }`}
+                        >
+                          <span className="w-8 text-right text-xs text-muted-foreground mr-3 flex-shrink-0 mt-0.5">
+                            {line.lineNumber}
+                          </span>
+                          <span className={`flex-1 whitespace-pre-wrap break-words text-xs ${
+                            line.type === 'add'
+                              ? 'text-green-800'
+                              : line.type === 'remove'
+                              ? 'text-red-800'
+                              : 'text-gray-700'
+                          }`}>
+                            {line.type === 'add' && '+ '}
+                            {line.type === 'remove' && '- '}
+                            {line.content || ' '}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </ScrollArea>
                 </div>
               </div>
             )}
           </ScrollArea>
         </div>
 
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button variant="outline" onClick={onReject}>
-            <X className="h-4 w-4 mr-2" />
-            Reject Changes
-          </Button>
-          <Button onClick={onAccept}>
-            <Check className="h-4 w-4 mr-2" />
-            Accept & Apply Changes
-          </Button>
+        <div className="flex-shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-6 py-4">
+          <div className="flex justify-center items-center gap-4">
+            <Button variant="outline" onClick={onReject} className="w-24 h-9 flex-shrink-0 px-3">
+              <X className="h-4 w-4 mr-1.5" />
+              Reject
+            </Button>
+            <Button onClick={onAccept} className="w-28 h-9 flex-shrink-0 px-3">
+              <Check className="h-4 w-4 mr-1.5" />
+              Accept
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
