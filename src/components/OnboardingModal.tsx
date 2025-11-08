@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Check, Code, Zap, FileText, ArrowRight, X } from "lucide-react";
+import { Check, Code, Zap, FileText, ArrowRight } from "lucide-react";
 
 interface OnboardingStep {
   title: string;
@@ -53,13 +53,10 @@ export function OnboardingModal({ isOpen, onClose }: { isOpen: boolean; onClose:
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="sr-only">TIDY Onboarding</DialogTitle>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-center">
             <Badge variant="secondary" className="text-xs">
               Step {currentStep + 1} of {ONBOARDING_STEPS.length}
             </Badge>
-            <Button variant="ghost" size="sm" onClick={handleSkip} className="h-6 w-6 p-0">
-              <X className="h-3 w-3" />
-            </Button>
           </div>
         </DialogHeader>
 
