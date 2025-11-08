@@ -1,73 +1,157 @@
-# Welcome to your Lovable project
+# TIDY
 
-## Project info
+> The AI-powered code editor that writes real code
 
-**URL**: https://lovable.dev/projects/de979e6c-037f-4969-a62a-6d75778630d7
+TIDY is a modern, AI-enhanced code editor built for developers who want intelligent assistance without compromising on professional editing capabilities. Powered by Google's Gemini AI and Microsoft's Monaco Editor (the same engine behind VS Code), TIDY combines the best of both worlds: powerful editing features and AI-driven insights.
 
-## How can I edit this code?
+![TIDY Editor](tidy-preview.jpeg)
 
-There are several ways of editing your application.
+## ✨ Key Features
 
-**Use Lovable**
+### 🤖 AI-Powered Analysis
+- **Multi-dimensional Code Analysis**: Comprehensive evaluation across code quality, security, performance, maintainability, testing, and documentation
+- **Smart Suggestions**: AI-generated improvements with diff visualization
+- **Impact Levels**: Prioritized recommendations from critical security fixes to minor optimizations
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/de979e6c-037f-4969-a62a-6d75778630d7) and start prompting.
+### 💬 Intelligent Chat Assistant
+- **Context-Aware Code Generation**: Ask questions and get code suggestions tailored to your project
+- **One-Click Integration**: Save chat suggestions directly to your snippet library
+- **Real-time Assistance**: Get help with debugging, refactoring, and best practices
 
-Changes made via Lovable will be committed automatically to this repo.
+### 📚 Smart Snippet Library
+- **Auto-Categorization**: AI-powered organization of code patterns
+- **Advanced Search**: Full-text search across titles, descriptions, code, and tags
+- **Usage Tracking**: Analytics on your most-used patterns
+- **Manual Organization**: Custom categories and tagging system
 
-**Use your preferred IDE**
+### ⚡ Professional Editor
+- **Monaco Editor**: VS Code-quality editing experience with syntax highlighting for 70+ languages
+- **Multi-File Support**: Tabbed interface with file tree navigation
+- **Advanced Features**: Multi-cursor editing, code folding, IntelliSense, and more
+- **Keyboard Shortcuts**: Familiar shortcuts for efficient workflow
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 🚀 Quick Start
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Prerequisites
+- Node.js 18+ and npm
+- Modern web browser
 
-Follow these steps:
+### Installation
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+```bash
+# Clone the repository
 git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Visit `http://localhost:5173` to start using TIDY.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Build for Production
 
-**Use GitHub Codespaces**
+```bash
+# Build the application
+npm run build
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+# Preview production build
+npm run preview
+```
 
-## What technologies are used for this project?
+## 📖 Usage Guide
 
-This project is built with:
+### Getting Started
+1. **Editor Interface**: The main Monaco editor provides professional code editing
+2. **File Management**: Use the left sidebar to create, organize, and navigate files
+3. **AI Analysis**: Click "Analyze now" in the right sidebar for comprehensive code review
+4. **Chat Assistant**: Access AI chat for code suggestions and questions
+5. **Snippet Library**: Save and organize reusable code patterns
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### AI Analysis Workflow
+1. Write or paste code in the editor
+2. Click "Analyze now" in the Code Reviewer sidebar
+3. Review suggestions organized by impact level
+4. Apply changes with one-click diff integration
 
-## How can I deploy this project?
+### Chat Integration
+1. Open the chat sidebar (Bot icon)
+2. Ask questions about your code or request implementations
+3. Save useful suggestions to your snippet library
+4. Copy patterns directly to your clipboard
 
-Simply open [Lovable](https://lovable.dev/projects/de979e6c-037f-4969-a62a-6d75778630d7) and click on Share -> Publish.
+## 🛠️ Technology Stack
 
-## Can I connect a custom domain to my Lovable project?
+- **Frontend**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **UI Components**: shadcn/ui with Radix UI primitives
+- **Styling**: Tailwind CSS
+- **Editor**: Monaco Editor (@monaco-editor/react)
+- **AI**: Google Gemini AI (@google/generative-ai)
+- **State Management**: React Query for API state
+- **Icons**: Lucide React & Iconify
 
-Yes, you can!
+## 🎯 Core Capabilities
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+### Code Analysis Dimensions
+- **Code Quality**: Readability, maintainability, best practices
+- **Security**: Vulnerability detection, input validation, authentication
+- **Performance**: Algorithm efficiency, memory usage, optimization
+- **Maintainability**: Modularity, technical debt, refactoring opportunities
+- **Testing**: Coverage analysis, test case completeness
+- **Documentation**: Comment quality, API documentation
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+### Editor Features
+- Syntax highlighting for 70+ languages
+- IntelliSense with auto-completion
+- Multi-cursor editing and selection
+- Code folding and navigation
+- Find/replace with regex support
+- Resizable panels for flexible layout
+
+## 🔧 Configuration
+
+### AI Settings
+Configure Gemini AI parameters in the settings panel:
+- Model selection
+- Temperature control
+- Response length limits
+- API timeout settings
+
+### Editor Preferences
+- Theme selection (light/dark)
+- Font family and size
+- Minimap toggle
+- Line numbers (absolute/relative)
+
+## 📊 Analytics & Insights
+
+- **Usage Statistics**: Track your most-used code patterns
+- **Category Distribution**: See your code library organization
+- **Activity Timeline**: Recent additions and modifications
+- **Search Analytics**: Popular search terms and patterns
+
+## 🤝 Contributing
+
+TIDY is built with modern development practices:
+- TypeScript for type safety
+- ESLint for code quality
+- Component-driven architecture
+- Responsive design principles
+
+## 📄 License
+
+This project is built with [Lovable](https://lovable.dev) and follows their terms of service.
+
+## 🆘 Support
+
+- **Documentation**: Comprehensive docs available in the `/docs` section
+- **Keyboard Shortcuts**: Press `?` or check settings for shortcuts
+- **AI Chat**: Ask questions directly in the chat interface
+
+---
+
+**TIDY** - Where AI meets professional code editing.
