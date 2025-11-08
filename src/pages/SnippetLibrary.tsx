@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Plus, BookOpen, TrendingUp, Clock, Star } from 'lucide-react';
 import { snippetStorage } from '@/lib/snippetStorage';
@@ -20,6 +18,7 @@ const SnippetLibrary: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [stats, setStats] = useState<any>(null);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [editingSnippet, setEditingSnippet] = useState<CodeSnippet | null>(null);
 
   useEffect(() => {
     loadSnippets();
@@ -61,6 +60,23 @@ const SnippetLibrary: React.FC = () => {
   const handleSaveSnippet = (snippetData: Omit<CodeSnippet, 'id' | 'createdAt' | 'usageCount'>) => {
     snippetStorage.saveSnippet(snippetData);
     loadSnippets();
+  };
+
+  const handleEditSnippet = (snippet: CodeSnippet) => {
+    setEditingSnippet(snippet);
+    setIsSaveModalOpen(true);
+  };
+
+  const handleUpdateSnippet = (id: string, snippetData: Omit<CodeSnippet, 'id' | 'createdAt' | 'usageCount'>) => {
+    if (snippetStorage.updateSnippet(id, snippetData)) {
+      loadSnippets();
+      setEditingSnippet(null);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsSaveModalOpen(false);
+    setEditingSnippet(null);
   };
 
   const categories = [
@@ -206,6 +222,7 @@ const SnippetLibrary: React.FC = () => {
               key={snippet.id}
               snippet={snippet}
               onDelete={handleDeleteSnippet}
+              onEdit={handleEditSnippet}
             />
           ))}
         </div>
@@ -214,8 +231,10 @@ const SnippetLibrary: React.FC = () => {
       <SaveSnippetModal
         key={isSaveModalOpen ? 'open' : 'closed'}
         isOpen={isSaveModalOpen}
-        onClose={() => setIsSaveModalOpen(false)}
+        onClose={handleCloseModal}
         onSave={handleSaveSnippet}
+        onUpdate={handleUpdateSnippet}
+        snippet={editingSnippet || undefined}
       />
     </div>
   );

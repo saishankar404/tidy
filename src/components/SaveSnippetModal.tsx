@@ -19,7 +19,9 @@ interface SaveSnippetModalProps {
   suggestedDescription?: string;
   suggestedCategory?: CodeSnippet['category'];
   suggestedTags?: string[];
+  snippet?: CodeSnippet; // For editing existing snippets
   onSave: (snippetData: Omit<CodeSnippet, 'id' | 'createdAt' | 'usageCount'>) => void;
+  onUpdate?: (id: string, snippetData: Omit<CodeSnippet, 'id' | 'createdAt' | 'usageCount'>) => void; // For updating existing snippets
 }
 
 const SaveSnippetModal: React.FC<SaveSnippetModalProps> = ({
@@ -30,15 +32,38 @@ const SaveSnippetModal: React.FC<SaveSnippetModalProps> = ({
   suggestedDescription = '',
   suggestedCategory = 'utility',
   suggestedTags = [],
+  snippet,
   onSave,
+  onUpdate,
 }) => {
   const { theme } = useTheme();
-  const [codeInput, setCodeInput] = useState(code || '');
-  const [title, setTitle] = useState(suggestedTitle);
-  const [description, setDescription] = useState(suggestedDescription);
-  const [category, setCategory] = useState<CodeSnippet['category']>(suggestedCategory);
-  const [tags, setTags] = useState<string[]>(suggestedTags);
+
+  // Initialize form state - for create mode, use props; for edit mode, will be set by useEffect
+  const [codeInput, setCodeInput] = useState(snippet?.code || code || '');
+  const [title, setTitle] = useState(snippet?.title || suggestedTitle);
+  const [description, setDescription] = useState(snippet?.description || suggestedDescription);
+  const [category, setCategory] = useState<CodeSnippet['category']>(snippet?.category || suggestedCategory);
+  const [tags, setTags] = useState<string[]>(snippet?.tags || suggestedTags);
   const [newTag, setNewTag] = useState('');
+
+  // Only update form when switching between edit/create modes (snippet prop changes)
+  React.useEffect(() => {
+    if (snippet) {
+      // Editing existing snippet
+      setCodeInput(snippet.code);
+      setTitle(snippet.title);
+      setDescription(snippet.description);
+      setCategory(snippet.category);
+      setTags(snippet.tags);
+    } else {
+      // Creating new snippet - reset to defaults
+      setCodeInput(code || '');
+      setTitle(suggestedTitle);
+      setDescription(suggestedDescription);
+      setCategory(suggestedCategory);
+      setTags(suggestedTags);
+    }
+  }, [snippet]); // Only depend on snippet prop, not individual form values
 
   const detectLanguage = (code: string): string => {
     if (code.includes('function') || code.includes('const') || code.includes('let') ||
@@ -81,16 +106,24 @@ const SaveSnippetModal: React.FC<SaveSnippetModalProps> = ({
     // Auto-detect language
     const language = detectLanguage(codeInput);
 
-    onSave({
+    const snippetData = {
       title: title.trim(),
       description: description.trim(),
       code: codeInput.trim(),
       language,
       tags,
       category,
-      source: 'manual',
-      metadata: {},
-    });
+      source: snippet ? snippet.source : 'manual',
+      metadata: snippet ? snippet.metadata : {},
+    };
+
+    if (snippet && onUpdate) {
+      // Update existing snippet
+      onUpdate(snippet.id, snippetData);
+    } else {
+      // Save new snippet
+      onSave(snippetData);
+    }
 
     onClose();
   };
@@ -108,7 +141,7 @@ const SaveSnippetModal: React.FC<SaveSnippetModalProps> = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>💾 Save Code Snippet</DialogTitle>
+          <DialogTitle>{snippet ? '✏️ Edit Code Snippet' : '💾 Save Code Snippet'}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -229,7 +262,7 @@ const SaveSnippetModal: React.FC<SaveSnippetModalProps> = ({
             Cancel
           </Button>
           <Button onClick={handleSave}>
-            Save Snippet
+            {snippet ? 'Update Snippet' : 'Save Snippet'}
           </Button>
         </DialogFooter>
       </DialogContent>

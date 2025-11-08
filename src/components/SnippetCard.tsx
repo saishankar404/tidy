@@ -10,9 +10,10 @@ import { useToast } from '@/hooks/use-toast';
 interface SnippetCardProps {
   snippet: CodeSnippet;
   onDelete: (id: string) => void;
+  onEdit: (snippet: CodeSnippet) => void;
 }
 
-const SnippetCard: React.FC<SnippetCardProps> = ({ snippet, onDelete }) => {
+const SnippetCard: React.FC<SnippetCardProps> = ({ snippet, onDelete, onEdit }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { toast } = useToast();
 
@@ -161,7 +162,7 @@ const SnippetCard: React.FC<SnippetCardProps> = ({ snippet, onDelete }) => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {/* TODO: Implement edit */}}
+            onClick={() => onEdit(snippet)}
           >
             <Edit className="h-3 w-3" />
           </Button>

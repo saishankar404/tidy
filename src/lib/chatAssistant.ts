@@ -494,7 +494,7 @@ Assistant: Provide a helpful, concise response. Focus on being practical and act
   }
 
   // Generate suggestions based on analysis results
-  private generateSuggestionFromAnalysis(userMessage: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string } | null {
+  private generateSuggestionFromAnalysis(userMessage: string): { description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } | null {
     if (!this.context.analysisResults || this.context.analysisResults.length === 0) {
       return null;
     }
@@ -579,13 +579,13 @@ Assistant: Provide a helpful, concise response. Focus on being practical and act
     }
 
     // For other issues, provide a generic suggestion
-    return {
-      description: `Address ${issue.category} issue: ${issue.title}`,
-      originalSnippet: code.substring(0, 100) + '...',
-      suggestedSnippet: `// TODO: ${issue.description}\n${code}`,
-      applyCommand: `replace:${code.substring(0, 100) + '...'}: // TODO: ${issue.description}\n${code}`,
-      type: 'improvement'
-    };
+        return {
+          description: `Address ${issue.category} issue: ${issue.title}`,
+          originalSnippet: code.substring(0, 100) + '...',
+          suggestedSnippet: `// TODO: ${issue.description}\n${code}`,
+          applyCommand: `replace:${code.substring(0, 100) + '...'}: // TODO: ${issue.description}\n${code}`,
+          type: 'improvement' as const
+        };
   }
 
   // Generate a general code improvement without requiring full analysis
@@ -1178,7 +1178,8 @@ Return ONLY the corrected code, no explanations or markdown formatting. The code
   private async generateAISnippet(userRequest: string, code: string): Promise<{ description: string; originalSnippet: string; suggestedSnippet: string; applyCommand: string; type: 'snippet' | 'improvement' } | null> {
     try {
       const prompt = this.buildSnippetPrompt(userRequest, code);
-      const aiResponse = await this.geminiService.generateCompletion(prompt);
+      // Use higher token limit for snippet generation to avoid truncation
+      const aiResponse = await this.geminiService.generateCompletion(prompt, { maxTokens: 8192 });
 
       // First, try to parse the AI response using the structured format
       const parsedResult = this.parseSnippetResponse(aiResponse, userRequest);
@@ -1263,42 +1264,33 @@ Return ONLY the corrected code, no explanations or markdown formatting. The code
     const language = this.context.language || 'javascript';
     const currentCode = code || 'No code context available';
 
-    return `You are an expert ${language} developer. Generate a practical, well-documented code snippet based on this request: "${userRequest}"
+    return `You are an expert ${language} developer. Generate a practical code snippet for: "${userRequest}"
 
-CRITICAL: You MUST provide ACTUAL CODE, not just descriptions. Include working code examples.
-
-Context:
-- Language: ${language}
-- Current code in file: ${currentCode.substring(0, 500)}${currentCode.length > 500 ? '...' : ''}
+Context: ${currentCode.substring(0, 200)}${currentCode.length > 200 ? '...' : ''}
 
 Requirements:
-1. Generate COMPLETE, RUNNABLE code that works immediately when copied
-2. Include proper error handling where appropriate
-3. Add JSDoc comments or TypeScript types for clarity
-4. Make it production-ready with best practices
-5. Keep it concise but fully functional
+1. Provide COMPLETE, RUNNABLE code in markdown code blocks
+2. Include JSDoc comments and error handling
+3. Make it production-ready and concise
 
-IMPORTANT: Respond with ACTUAL CODE in markdown code blocks. Do NOT just describe what the code should do - PROVIDE THE CODE ITSELF.
-
-Format your response as:
-DESCRIPTION: Brief description of what this snippet does
+Format:
+DESCRIPTION: Brief description
 
 CODE:
 \`\`\`${language}
-// Your complete, working code here
-// Include all necessary imports, functions, and examples
+// Complete working code with examples
 \`\`\`
 
-Example of what to provide:
-DESCRIPTION: A utility function to add two numbers with validation
+Example for "add two numbers":
+DESCRIPTION: Function to add two numbers with validation
 
 CODE:
-\`\`\`${language}
+\`\`\`javascript
 /**
  * Adds two numbers with input validation
  * @param {number} a - First number
  * @param {number} b - Second number
- * @returns {number} The sum of a and b
+ * @returns {number} The sum
  */
 function addNumbers(a, b) {
   if (typeof a !== 'number' || typeof b !== 'number') {
@@ -1307,12 +1299,11 @@ function addNumbers(a, b) {
   return a + b;
 }
 
-// Example usage:
-const result = addNumbers(5, 3);
-console.log(result); // Output: 8
+// Usage:
+console.log(addNumbers(5, 3)); // 8
 \`\`\`
 
-Make sure the code is syntactically correct and immediately runnable.`;
+Provide actual code, not descriptions.`;
   }
 
   private isValidCodeSnippet(text: string): boolean {
@@ -1630,6 +1621,43 @@ export default MyComponent;`;
         suggestedSnippet: snippet,
         applyCommand: `replace:// Add React component here:${snippet}`,
         type: 'snippet'
+      };
+    }
+
+    // Arithmetic operation snippets (add, sum, numbers, etc.)
+    if (request.includes('add') || request.includes('sum') || request.includes('number') ||
+        request.includes('plus') || request.includes('math') || request.includes('calculate') ||
+        request.includes('arithmetic')) {
+      const snippet = `/**
+ * Adds two numbers and returns the result
+ * @param {number} a - First number
+ * @param {number} b - Second number
+ * @returns {number} The sum of a and b
+ */
+function addNumbers(a, b) {
+  // Validate inputs
+  if (typeof a !== 'number' || typeof b !== 'number') {
+    throw new Error('Both arguments must be numbers');
+  }
+
+  return a + b;
+}
+
+// Example usage:
+const result = addNumbers(5, 3);
+console.log(result); // Output: 8
+
+// You can also use it with variables:
+const x = 10;
+const y = 20;
+const sum = addNumbers(x, y);
+console.log(\`The sum of \${x} and \${y} is \${sum}\`);`;
+      return {
+        description: 'Function to add two numbers with input validation',
+        originalSnippet: '// Add code snippet here',
+        suggestedSnippet: snippet,
+        applyCommand: `replace:// Add code snippet here:${snippet}`,
+        type: 'snippet' as const
       };
     }
 

@@ -71,7 +71,12 @@ export class GeminiService {
     }
 
     // Use custom maxTokens if provided, otherwise use the configured default
-    const effectiveMaxTokens = options?.maxTokens || this.modelName === 'gemini-2.5-flash' ? 4096 : 2048;
+    let effectiveMaxTokens = options?.maxTokens || this.modelName === 'gemini-2.5-flash' ? 4096 : 2048;
+
+    // For snippet generation, start with higher limit to avoid truncation
+    if (prompt.includes('Generate a practical code snippet') || prompt.includes('Generate a practical, well-documented code snippet')) {
+      effectiveMaxTokens = Math.max(effectiveMaxTokens, 8192);
+    }
 
     // Reduced logging for production
     // console.log('🚀 Sending to Gemini API:', { model: this.modelName, promptLength: prompt.length, maxTokens: effectiveMaxTokens });
@@ -148,19 +153,22 @@ export class GeminiService {
             }
           }
 
-          // Final check
-          if (!text || text.trim().length === 0) {
-            console.error('❌ Empty text response from API');
-            console.error('Response object:', JSON.stringify(response, null, 2));
+           // Final check
+           if (!text || text.trim().length === 0) {
+             console.error('❌ Empty text response from API');
+             console.error('Response object:', JSON.stringify(response, null, 2));
 
-            // Check if it's a MAX_TOKENS issue
-            if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
-              throw new Error('MAX_TOKENS: Response was cut off due to maxTokens limit being too low. Increase maxTokens in settings (recommended: 4096+)');
-            }
+             // Check if it's a MAX_TOKENS issue - retry with higher limit
+             if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+               console.warn('⚠️ Response was truncated due to maxTokens limit, retrying with higher limit...');
+               // Retry with doubled token limit
+               const retryOptions = { maxTokens: effectiveMaxTokens * 2 };
+               return await this.generateCompletion(prompt, retryOptions);
+             }
 
-            // Empty response - likely safety filter or API issue
-            throw new Error('EMPTY_RESPONSE: API returned empty response. This may be due to safety filters or API configuration.');
-          }
+             // Empty response - likely safety filter or API issue
+             throw new Error('EMPTY_RESPONSE: API returned empty response. This may be due to safety filters or API configuration.');
+           }
 
           // Success - reduced logging
           // console.log('✅ Received:', text.length, 'chars');
