@@ -195,6 +195,7 @@ export function EditorSidebar({
     console.log('Hover enter', item.name);
 
     const content = fileContents[item.path] || "";
+    const targetElement = e.currentTarget; // Capture immediately
 
     // Clear any existing timeouts
     if (hoverTimeoutRef.current) {
@@ -206,13 +207,15 @@ export function EditorSidebar({
 
     // Set new timeout for hover delay (200ms for smooth experience)
     hoverTimeoutRef.current = setTimeout(() => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      setHoverPreview({
-        content: content.slice(0, 300), // First 300 chars
-        position: { x: rect.right + 12, y: rect.top },
-        fileName: item.name,
-      });
-      console.log('Show preview', item.name);
+      if (targetElement) {
+        const rect = targetElement.getBoundingClientRect();
+        setHoverPreview({
+          content: content.slice(0, 300), // First 300 chars
+          position: { x: rect.right + 12, y: rect.top },
+          fileName: item.name,
+        });
+        console.log('Show preview', item.name);
+      }
     }, 200);
   };
 

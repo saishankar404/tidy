@@ -306,7 +306,7 @@ export function CodeEditor({ content, language, onChange, enableMinimap = false,
         }
 
         // Skip if ends with common punctuation that doesn't need completion
-        if (/[;,.{}()\[\]]$/ .test(textBeforeCursor)) {
+        if (/[;,.{}()[\]]$/ .test(textBeforeCursor)) {
           console.log('⏭️ Skipping - ends with punctuation');
           resolve({ items: [] });
           return;
@@ -363,7 +363,7 @@ export function CodeEditor({ content, language, onChange, enableMinimap = false,
           // Get surrounding context (5 lines before and after for better context)
           const startLine = Math.max(1, position.lineNumber - 5);
           const endLine = Math.min(modelCheck.getLineCount(), position.lineNumber + 3);
-          let contextLines = [];
+          const contextLines = [];
           for (let i = startLine; i <= endLine; i++) {
             if (i === position.lineNumber) {
               // Include only text before cursor on current line
@@ -375,7 +375,7 @@ export function CodeEditor({ content, language, onChange, enableMinimap = false,
           const surroundingContext = contextLines.join('\n');
 
           // Smart prompt based on what user is typing
-          let prompt = `You are an expert code completion AI. Complete the ${language} code at the cursor (█).
+          const prompt = `You are an expert code completion AI. Complete the ${language} code at the cursor (█).
 
 Rules:
 - Return ONLY the completion text that comes after the cursor
