@@ -59,11 +59,28 @@ export default {
           bg: "hsl(var(--sidebar-bg))",
         },
         "editor-bg": "hsl(var(--editor-bg))",
+        // Landing page colors
+        neon: "hsl(var(--neon-green))",
+        "neon-bright": "hsl(var(--neon-green-bright))",
+        "dark-gray": "hsl(var(--dark-gray))",
+        "menu-bar": "hsl(var(--menu-bar))",
+        "tag-background": "hsl(var(--tag-background))",
+        "symbol-black": "hsl(var(--symbol-black))",
+        "symbol-green": "hsl(var(--symbol-green))",
+        "feature-purple": "hsl(var(--feature-purple))",
+        "feature-lavender": "hsl(var(--feature-lavender))",
+        "feature-lime": "hsl(var(--feature-lime))",
+        "feature-navy": "hsl(var(--feature-navy))",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      spacing: {
+        section: "var(--spacing-section)",
+        block: "var(--spacing-block)",
+        element: "var(--spacing-element)",
       },
       keyframes: {
         "accordion-down": {
@@ -111,6 +128,10 @@ export default {
         "drag-lift": {
           "0%": { transform: "translateY(0)" },
           "100%": { transform: "translateY(-2px)" }
+        },
+        marquee: {
+          "0%": { transform: "translateX(0%)" },
+          "100%": { transform: "translateX(-100%)" }
         }
       },
       animation: {
@@ -121,7 +142,8 @@ export default {
         "preview-in": "preview-in 0.15s ease-out",
         "preview-out": "preview-out 0.1s ease-in",
         "folder-expand": "folder-expand 0.2s ease-out",
-        "drag-lift": "drag-lift 0.15s ease-out"
+        "drag-lift": "drag-lift 0.15s ease-out",
+        marquee: "marquee 25s linear infinite"
       },
     },
   },

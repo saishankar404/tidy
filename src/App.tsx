@@ -4,7 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SettingsProvider } from "@/lib/SettingsContext";
-import Index from "./pages/Index";
+import LandingPage from "./pages/landing/LandingPage";
+import EditorPage from "./pages/EditorPage";
 import AnalysisHistory from "./pages/AnalysisHistory";
 import SnippetLibrary from "./pages/SnippetLibrary";
 import NotFound from "./pages/NotFound";
@@ -18,13 +19,14 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/history" element={<AnalysisHistory />} />
-            <Route path="/snippets" element={<SnippetLibrary />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+           <Routes>
+             <Route path="/" element={<LandingPage />} />
+             <Route path="/code" element={<EditorPage />} />
+             <Route path="/history" element={<AnalysisHistory />} />
+             <Route path="/snippets" element={<SnippetLibrary />} />
+             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+             <Route path="*" element={<NotFound />} />
+           </Routes>
         </BrowserRouter>
       </TooltipProvider>
     </SettingsProvider>

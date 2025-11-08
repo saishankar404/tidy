@@ -1,0 +1,43 @@
+.cardContainer{
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: sticky;
+  top: 0px;
+  .card{
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    top: -25%;
+    height: 800px;
+    width: 1400px;
+    border-radius: 25px;
+    padding: 50px;
+    transform-origin: top;
+    font-family: 'Satoshi', sans-serif;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: left;
+    h2{
+      margin: 0 0 40px 0;
+      font-size: 64px;
+      font-weight: bold;
+      text-align: center;
+      &.whiteText{
+        color: white;
+      }
+    }
+    p{
+      font-size: 32px;
+      max-width: 800px;
+      line-height: 1.4;
+      text-align: center;
+      &.whiteText{
+        color: white;
+      }
+    }
+  }
+}
