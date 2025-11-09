@@ -155,3 +155,6 @@ This project is built with [Lovable](https://lovable.dev) and follows their term
 ---
 
 **TIDY** - Where AI meets professional code editing.
+
+
+AIzaSyAxCRJGv_U7AqlKwq-mOAbwpf7FSPnhUoA
